@@ -178,7 +178,7 @@ function bindSettingsUI(container) {
 
         saveSettingsDebounced();
 
-        const injectFields = ['injectEnabled', 'injectPosition', 'injectDepth', 'injectScan', 'injectRole'];
+        const injectFields = ['injectEnabled', 'injectPosition', 'injectDepth', 'injectScan', 'injectRole', 'injectTemplate'];
         if (injectFields.includes(name)) {
             applyInjection();
         }
@@ -332,9 +332,19 @@ function applyInjection() {
     const settings = extension_settings[settingsKey];
     if (!settings || !settings.injectEnabled || !settings.enabled) {
         try {
-        setExtensionPrompt(extensionName, '', extension_prompt_types.IN_PROMPT, 0, false, extension_prompt_roles.SYSTEM);
+            setExtensionPrompt(extensionName, '', extension_prompt_types.IN_PROMPT, 0, false, extension_prompt_roles.SYSTEM);
         } catch (err) {
             console.error(`[${extensionName}] Failed to clear injection:`, err);
+        }
+        return;
+    }
+
+    const position = Number(settings.injectPosition ?? extension_prompt_types.IN_PROMPT);
+    if (position === extension_prompt_types.NONE) {
+        try {
+            setExtensionPrompt(extensionName, '', extension_prompt_types.IN_PROMPT, 0, false, extension_prompt_roles.SYSTEM);
+        } catch (err) {
+            console.error(`[${extensionName}] Failed to clear injection (NONE):`, err);
         }
         return;
     }
@@ -359,7 +369,6 @@ function applyInjection() {
         .replace('{{last_messages}}', transcript)
         .replace('{{words}}', settings.summaryWords ?? defaultSettings.summaryWords);
 
-    const position = Number(settings.injectPosition ?? extension_prompt_types.IN_PROMPT);
     const depth = Number(settings.injectDepth ?? 2);
     const scan = !!settings.injectScan;
     const role = Number(settings.injectRole ?? extension_prompt_roles.SYSTEM);
