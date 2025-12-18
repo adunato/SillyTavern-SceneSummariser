@@ -1,6 +1,6 @@
 // Third-party extensions live under /scripts/extensions/third-party/.
 // Step three levels up to reach the core helpers.
-import { extension_settings, renderExtensionTemplateAsync } from '../../../extensions.js';
+import { extension_settings, renderExtensionTemplateAsync, getContext } from '../../../extensions.js';
 import { generateRaw, saveSettingsDebounced } from '../../../../script.js';
 
 const extensionName = 'SillyTavern-SceneSummariser';
@@ -219,7 +219,23 @@ async function onSummariseClick() {
     const settings = extension_settings[settingsKey];
     const words = settings.summaryWords || defaultSettings.summaryWords;
     const promptTemplate = settings.summaryPrompt || defaultSettings.summaryPrompt;
-    const prompt = promptTemplate.replace('{{words}}', words);
+    const promptText = promptTemplate.replace('{{words}}', words);
+
+    // Build chat transcript for context
+    const ctx = getContext();
+    const chat = ctx?.chat || [];
+    const name1 = ctx?.name1 || 'User';
+    const name2 = ctx?.name2 || 'Character';
+
+    const transcript = chat
+        .slice(-50) // last 50 messages
+        .map((m) => {
+            const speaker = m.name || (m.is_user ? name1 : name2);
+            return `${speaker}: ${m.mes || ''}`.trim();
+        })
+        .join('\n');
+
+    const prompt = `${promptText}\n\nChat history:\n${transcript}`;
 
     try {
         const result = await generateRaw({ prompt });
