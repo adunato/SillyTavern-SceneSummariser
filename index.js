@@ -22,9 +22,6 @@ const defaultSettings = {
     storeHistory: true,
     maxSummaries: 5,
     debugMode: false,
-    currentSummary: '',
-    summaryCounter: 0,
-    lastSummarisedIndex: 0,
     injectEnabled: true,
     injectPosition: extension_prompt_types.IN_PROMPT,
     injectDepth: 2,
@@ -34,13 +31,57 @@ const defaultSettings = {
     limitToUnsummarised: false,
     insertSceneBreak: true,
     trimAfterSceneBreak: true,
+};
+
+const chatStateDefaults = {
+    currentSummary: '',
+    summaryCounter: 0,
+    lastSummarisedIndex: 0,
     sceneBreakMarkerId: '',
     sceneBreakMesId: null,
 };
 
+const legacyStateKeys = Object.keys(chatStateDefaults);
+
 let buttonIntervalId = null;
 let isSummarising = false;
 let debugMessages = [];
+let settingsContainer = null;
+
+function getActiveChatId() {
+    const ctx = getContext();
+    const chatId = ctx?.getCurrentChatId?.();
+    return chatId ?? '__no_chat__';
+}
+
+function pullLegacyState(settings) {
+    const legacy = {};
+    let found = false;
+    for (const key of legacyStateKeys) {
+        if (settings[key] !== undefined) {
+            legacy[key] = settings[key];
+            delete settings[key];
+            found = true;
+        }
+    }
+    return found ? legacy : null;
+}
+
+function getChatState(chatId = null) {
+    ensureSettings();
+    const settings = extension_settings[settingsKey];
+    const activeChatId = chatId || getActiveChatId();
+
+    if (!settings.chatStates[activeChatId]) {
+        const legacy = pullLegacyState(settings);
+        settings.chatStates[activeChatId] = {
+            ...chatStateDefaults,
+            ...(legacy || {}),
+        };
+    }
+
+    return settings.chatStates[activeChatId];
+}
 
 function logDebug(level, ...args) {
     if (!extension_settings[settingsKey]?.debugMode) return;
@@ -65,6 +106,10 @@ function ensureSettings() {
             extension_settings[settingsKey][key] = value;
         }
     }
+
+    if (!extension_settings[settingsKey].chatStates || typeof extension_settings[settingsKey].chatStates !== 'object') {
+        extension_settings[settingsKey].chatStates = {};
+    }
 }
 
 async function mountSettings() {
@@ -81,6 +126,7 @@ async function mountSettings() {
         container.id = containerId;
         parent.appendChild(container);
     }
+    settingsContainer = container;
 
     const html = await renderExtensionTemplateAsync(`third-party/${extensionName}`, 'settings');
     container.innerHTML = html;
@@ -238,6 +284,7 @@ function bindSettingsUI(container) {
 function updateSettingsUI(container) {
     if (!container) return;
     const settings = extension_settings[settingsKey] || defaultSettings;
+    const chatState = getChatState();
 
     const setValue = (selector, val) => {
         const el = container.querySelector(selector);
@@ -251,31 +298,31 @@ function updateSettingsUI(container) {
         }
     };
 
-    setValue('#ss_enabled', settings.enabled);
-    setValue('#ss_autoSummarise', settings.autoSummarise);
-    setValue('#ss_summaryPrompt', settings.summaryPrompt);
-    setValue('#ss_summaryWords', settings.summaryWords);
-    setValue('#ss_storeHistory', settings.storeHistory);
-    setValue('#ss_maxSummaries', settings.maxSummaries);
-    setValue('#ss_debugMode', settings.debugMode);
-    setValue('#ss_injectEnabled', settings.injectEnabled);
-    setValue('#ss_injectDepth', settings.injectDepth);
-    setValue('#ss_injectScan', settings.injectScan);
-    setValue('#ss_injectRole', settings.injectRole);
-    setValue('#ss_injectTemplate', settings.injectTemplate);
-    setValue('#ss_limitToUnsummarised', settings.limitToUnsummarised);
-    setValue('#ss_insertSceneBreak', settings.insertSceneBreak);
-    setValue('#ss_trimAfterSceneBreak', settings.trimAfterSceneBreak);
+    setValue('#ss_enabled', settings.enabled ?? defaultSettings.enabled);
+    setValue('#ss_autoSummarise', settings.autoSummarise ?? defaultSettings.autoSummarise);
+    setValue('#ss_summaryPrompt', settings.summaryPrompt ?? defaultSettings.summaryPrompt);
+    setValue('#ss_summaryWords', settings.summaryWords ?? defaultSettings.summaryWords);
+    setValue('#ss_storeHistory', settings.storeHistory ?? defaultSettings.storeHistory);
+    setValue('#ss_maxSummaries', settings.maxSummaries ?? defaultSettings.maxSummaries);
+    setValue('#ss_debugMode', settings.debugMode ?? defaultSettings.debugMode);
+    setValue('#ss_injectEnabled', settings.injectEnabled ?? defaultSettings.injectEnabled);
+    setValue('#ss_injectDepth', settings.injectDepth ?? defaultSettings.injectDepth);
+    setValue('#ss_injectScan', settings.injectScan ?? defaultSettings.injectScan);
+    setValue('#ss_injectRole', settings.injectRole ?? defaultSettings.injectRole);
+    setValue('#ss_injectTemplate', settings.injectTemplate ?? defaultSettings.injectTemplate);
+    setValue('#ss_limitToUnsummarised', settings.limitToUnsummarised ?? defaultSettings.limitToUnsummarised);
+    setValue('#ss_insertSceneBreak', settings.insertSceneBreak ?? defaultSettings.insertSceneBreak);
+    setValue('#ss_trimAfterSceneBreak', settings.trimAfterSceneBreak ?? defaultSettings.trimAfterSceneBreak);
 
     // Radio for position
     const radios = container.querySelectorAll('input[name="injectPosition"]');
     radios.forEach(r => r.checked = String(r.value) === String(settings.injectPosition));
 
     const wordsDisplay = container.querySelector('#ss_summaryWords_value');
-    if (wordsDisplay) wordsDisplay.textContent = settings.summaryWords;
+    if (wordsDisplay) wordsDisplay.textContent = settings.summaryWords ?? defaultSettings.summaryWords;
 
     const currentSummary = container.querySelector('#ss_currentSummary');
-    if (currentSummary) currentSummary.value = settings.currentSummary || '';
+    if (currentSummary) currentSummary.value = chatState.currentSummary || '';
 
     applyInjection();
     logDebug('log', 'Settings UI updated');
@@ -283,6 +330,7 @@ function updateSettingsUI(container) {
 
 async function onSummariseClick() {
     if (isSummarising) return;
+    ensureSettings();
     if (!extension_settings[settingsKey]?.enabled) {
         console.warn(`[${extensionName}] Summariser disabled.`);
         return;
@@ -302,12 +350,13 @@ async function onSummariseClick() {
     const promptTemplate = settings.summaryPrompt || defaultSettings.summaryPrompt;
     const promptText = promptTemplate
         .replace('{{words}}', words)
-        .replace('{{summary}}', settings.currentSummary || '');
+        .replace('{{summary}}', getChatState().currentSummary || '');
 
     // Build chat transcript for context
     const ctx = getContext();
     const chat = ctx?.chat || [];
-    const lastIdx = Math.min(settings.lastSummarisedIndex || 0, chat.length);
+    const chatState = getChatState();
+    const lastIdx = Math.min(chatState.lastSummarisedIndex || 0, chat.length);
     const newMessages = chat.slice(lastIdx);
 
     if (!newMessages.length) {
@@ -342,14 +391,14 @@ async function onSummariseClick() {
         logDebug('log', 'LLM summary result', cleaned);
 
         // Update stored summary list
-        const nextId = (settings.summaryCounter ?? 0) + 1;
+        const nextId = (chatState.summaryCounter ?? 0) + 1;
         const entry = `Scene #${nextId}: ${cleaned}`;
 
         const keepHistory = settings.storeHistory !== false;
         let finalSummary = entry;
 
         if (keepHistory) {
-            const existingLines = (settings.currentSummary || '').trim();
+            const existingLines = (chatState.currentSummary || '').trim();
             const combined = existingLines ? `${existingLines}\n${entry}` : entry;
 
             // Enforce max summaries if configured
@@ -359,10 +408,10 @@ async function onSummariseClick() {
             finalSummary = trimmedLines.join('\n');
         }
 
-        settings.summaryCounter = nextId;
+        chatState.summaryCounter = nextId;
         // Use the trimmed/combined history so we keep appending while enforcing max history
-        settings.currentSummary = keepHistory ? finalSummary : entry;
-        settings.lastSummarisedIndex = chat.length;
+        chatState.currentSummary = keepHistory ? finalSummary : entry;
+        chatState.lastSummarisedIndex = chat.length;
 
         const currentSummaryEl = document.getElementById('ss_currentSummary');
         if (currentSummaryEl) {
@@ -389,6 +438,7 @@ async function onSummariseClick() {
 
 function applyInjection() {
     const settings = extension_settings[settingsKey];
+    const chatState = getChatState();
     if (!settings || !settings.injectEnabled || !settings.enabled) {
         try {
             setExtensionPrompt(extensionName, '', extension_prompt_types.IN_PROMPT, 0, false, extension_prompt_roles.SYSTEM);
@@ -410,7 +460,7 @@ function applyInjection() {
 
     const ctx = getContext();
     const chat = ctx?.chat || [];
-    const lastIdx = Math.min(settings.lastSummarisedIndex || 0, chat.length);
+    const lastIdx = Math.min(chatState.lastSummarisedIndex || 0, chat.length);
     const newMessages = chat.slice(lastIdx);
     const name1 = ctx?.name1 || 'User';
     const name2 = ctx?.name2 || 'Character';
@@ -424,7 +474,7 @@ function applyInjection() {
 
     const template = settings.injectTemplate || defaultSettings.injectTemplate;
     const value = template
-        .replace('{{summary}}', settings.currentSummary || '')
+        .replace('{{summary}}', chatState.currentSummary || '')
         .replace('{{last_messages}}', transcript)
         .replace('{{words}}', settings.summaryWords ?? defaultSettings.summaryWords);
 
@@ -444,6 +494,7 @@ function applyInjection() {
 async function insertSceneBreakMarker() {
     const ctx = getContext();
     if (!ctx || !Array.isArray(ctx.chat)) return;
+    const chatState = getChatState();
 
     const markerId = `scene-break-${Date.now()}`;
     const markerHtml = `<details class="scene-summary-break" data-marker-id="${markerId}"><summary>📑 Scene Summary Boundary</summary><div>Summaries above; new messages below.</div></details>`;
@@ -472,8 +523,8 @@ async function insertSceneBreakMarker() {
         console.error(`[${extensionName}] Failed to add scene break marker:`, err);
     }
 
-    extension_settings[settingsKey].sceneBreakMarkerId = markerId;
-    extension_settings[settingsKey].sceneBreakMesId = messageId;
+    chatState.sceneBreakMarkerId = markerId;
+    chatState.sceneBreakMesId = messageId;
     logDebug('log', 'Inserted scene break marker', markerId, messageId);
 }
 
@@ -483,27 +534,42 @@ jQuery(async () => {
     startButtonMount();
     try {
         eventSource?.on(event_types.CHAT_COMPLETION_PROMPT_READY, filterChatCompletionPrompt);
+        eventSource?.on(event_types.CHAT_CHANGED, onChatChanged);
         logDebug('log', 'Registered prompt filter listener');
     } catch (err) {
         console.error(`[${extensionName}] Failed to register prompt filter:`, err);
     }
 });
+
+function onChatChanged() {
+    logDebug('log', 'Chat changed, refreshing chat-scoped state');
+    updateSettingsUI(settingsContainer);
+    applyInjection();
+}
+function replacePromptMessages(eventData, newMessages) {
+    // Mutate in-place so upstream references (chatCompletion) see the change
+    eventData.chat.splice(0, eventData.chat.length, ...newMessages);
+}
+
 function filterChatCompletionPrompt(eventData) {
+    ensureSettings();
     const settings = extension_settings[settingsKey];
+    const chatState = getChatState();
     if (!settings?.limitToUnsummarised) return;
     if (!Array.isArray(eventData?.chat)) return;
 
     // Prefer precise trim using scene break marker if available
-    if (settings.trimAfterSceneBreak && settings.sceneBreakMarkerId && settings.sceneBreakMesId !== null) {
+    if (settings.trimAfterSceneBreak && chatState.sceneBreakMarkerId && chatState.sceneBreakMesId !== null) {
         const markerIndex = eventData.chat.findIndex(m =>
-            m?.mesid === settings.sceneBreakMesId ||
-            m?.extra?.marker_id === settings.sceneBreakMarkerId ||
-            (typeof m?.mes === 'string' && m.mes.includes(settings.sceneBreakMarkerId))
+            m?.mesid === chatState.sceneBreakMesId ||
+            m?.extra?.marker_id === chatState.sceneBreakMarkerId ||
+            (typeof m?.mes === 'string' && m.mes.includes(chatState.sceneBreakMarkerId))
         );
 
         if (markerIndex !== -1 && markerIndex < eventData.chat.length - 1) {
-            eventData.chat = eventData.chat.slice(markerIndex + 1);
-            logDebug('log', `Trimmed prompt after marker (mesid=${settings.sceneBreakMesId}) to ${eventData.chat.length} messages`);
+            const trimmed = eventData.chat.slice(markerIndex + 1);
+            replacePromptMessages(eventData, trimmed);
+            logDebug('log', `Trimmed prompt after marker (mesid=${chatState.sceneBreakMesId}) to ${trimmed.length} messages`);
             return;
         } else {
             logDebug('warn', 'Marker not found in prompt; falling back to unsummarised slice');
@@ -513,20 +579,15 @@ function filterChatCompletionPrompt(eventData) {
     // Fallback: slice by lastSummarisedIndex
     const ctx = getContext();
     const chat = ctx?.chat || [];
-    const lastIdx = Math.min(settings.lastSummarisedIndex || 0, chat.length);
-    const messagesAfter = chat.length - lastIdx;
+    const lastIdx = Math.min(chatState.lastSummarisedIndex || 0, chat.length);
+    const sliced = chat.slice(lastIdx);
 
-    if (messagesAfter <= 0) {
-        logDebug('warn', 'No messages after last summary; leaving prompt untouched');
+    if (!sliced.length) {
+        logDebug('warn', 'No messages after last summary; clearing prompt messages');
+        replacePromptMessages(eventData, []);
         return;
     }
 
-    const sliced = eventData.chat.slice(-messagesAfter);
-    if (sliced.length === 0) {
-        logDebug('warn', 'Sliced prompt empty; leaving original');
-        return;
-    }
-
-    eventData.chat = sliced;
-    logDebug('log', `Trimmed chat prompt to ${sliced.length} messages (after last summary)`);
+    replacePromptMessages(eventData, sliced);
+    logDebug('log', `Trimmed chat prompt to ${sliced.length} messages (after last summary index=${lastIdx})`);
 }
