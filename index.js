@@ -33,6 +33,20 @@ const defaultSettings = {
 
 let buttonIntervalId = null;
 let isSummarising = false;
+let debugMessages = [];
+
+function logDebug(level, ...args) {
+    if (!extension_settings[settingsKey]?.debugMode) return;
+    const ts = new Date().toISOString();
+    const line = `[${extensionName}][${level.toUpperCase()}] ${ts} ${args.map(a => (typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' ')}`;
+    debugMessages.push(line);
+    if (debugMessages.length > 500) {
+        debugMessages = debugMessages.slice(-500);
+    }
+    if (level === 'error') console.error(line);
+    else if (level === 'warn') console.warn(line);
+    else console.log(line);
+}
 
 function ensureSettings() {
     if (!extension_settings[settingsKey]) {
@@ -184,6 +198,22 @@ function bindSettingsUI(container) {
         }
     });
 
+    // Debug controls
+    container.querySelector('#ss_copyLogs')?.addEventListener('click', async () => {
+        const text = debugMessages.join('\n');
+        try {
+            await navigator.clipboard.writeText(text);
+            logDebug('log', 'Debug logs copied to clipboard');
+        } catch (err) {
+            console.error(`[${extensionName}] Failed to copy logs:`, err);
+        }
+    });
+
+    container.querySelector('#ss_clearLogs')?.addEventListener('click', () => {
+        debugMessages = [];
+        logDebug('log', 'Debug logs cleared');
+    });
+
     const summariseButton = container.querySelector('#ss_summarise_button');
     if (summariseButton) {
         summariseButton.addEventListener('click', onSummariseClick);
@@ -228,6 +258,7 @@ function updateSettingsUI(container) {
     if (currentSummary) currentSummary.value = settings.currentSummary || '';
 
     applyInjection();
+    logDebug('log', 'Settings UI updated');
 }
 
 async function onSummariseClick() {
@@ -244,6 +275,7 @@ async function onSummariseClick() {
         button.classList.add('disabled');
         button.title = 'Summarising...';
     }
+    logDebug('log', 'Summarise clicked');
 
     const settings = extension_settings[settingsKey];
     const words = settings.summaryWords || defaultSettings.summaryWords;
@@ -260,6 +292,7 @@ async function onSummariseClick() {
 
     if (!newMessages.length) {
         console.warn(`[${extensionName}] No new messages since last summary; skipping.`);
+        logDebug('warn', 'No new messages since last summary; skipping');
         if (button) {
             button.classList.remove('disabled');
             button.title = originalTitle || 'Summarise Scene';
@@ -286,6 +319,7 @@ async function onSummariseClick() {
     try {
         const result = await generateRaw({ prompt });
         const cleaned = (result || '').trim();
+        logDebug('log', 'LLM summary result', cleaned);
 
         // Update stored summary list
         const nextId = (settings.summaryCounter ?? 0) + 1;
@@ -319,6 +353,7 @@ async function onSummariseClick() {
         saveSettingsDebounced();
     } catch (error) {
         console.error(`[${extensionName}] Error during summarisation:`, error);
+        logDebug('error', 'Summarisation error', error?.message || error);
     } finally {
         if (button) {
             button.classList.remove('disabled');
@@ -375,8 +410,10 @@ function applyInjection() {
 
     try {
         setExtensionPrompt(extensionName, value, position, depth, scan, role);
+        logDebug('log', `Injection updated (pos=${position}, depth=${depth}, scan=${scan}, role=${role})`);
     } catch (err) {
         console.error(`[${extensionName}] Failed to set injection prompt:`, err);
+        logDebug('error', 'Failed to set injection prompt', err?.message || err);
     }
 }
 
