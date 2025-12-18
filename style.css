@@ -1,0 +1,24 @@
+/* Align Scene Summariser settings UI with Guided Generations structure */
+.SillyTavern-SceneSummariser-settingslist .inline-drawer-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.SillyTavern-SceneSummariser-settingslist .inline-drawer-icon {
+    margin-left: 8px;
+}
+
+.SillyTavern-SceneSummariser-settingslist .settings_section h4 {
+    margin-top: 0;
+}
+
+.SillyTavern-SceneSummariser-settingslist .setting_item {
+    margin-bottom: 10px;
+}
+
+.SillyTavern-SceneSummariser-settingslist .setting_item_description {
+    display: block;
+    margin-top: 4px;
+    color: var(--text-dimmed, #9aa0a6);
+}

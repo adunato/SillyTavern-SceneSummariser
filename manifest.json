@@ -1,0 +1,13 @@
+{
+    "name": "SillyTavern-SceneSummariser",
+    "display_name": "Scene Summariser",
+    "loading_order": 120,
+    "requires": [],
+    "optional": [],
+    "js": "index.js",
+    "css": "style.css",
+    "author": "User",
+    "description": "Placeholder extension scaffold for future scene summarization features.",
+    "version": "0.1.0",
+    "manifest_version": 3
+}
