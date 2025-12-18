@@ -1,6 +1,7 @@
 // Third-party extensions live under /scripts/extensions/third-party/.
 // Step three levels up to reach the core helpers.
 import { extension_settings, renderExtensionTemplateAsync } from '../../../extensions.js';
+import { generateRaw, saveSettingsDebounced } from '../../../../script.js';
 
 const extensionName = 'SillyTavern-SceneSummariser';
 const settingsKey = extensionName;
@@ -9,14 +10,18 @@ const defaultSettings = {
     enabled: true,
     showSummariseButton: true,
     autoSummarise: false,
-    showToolbar: false,
-    summaryStyle: 'concise',
-    storeHistory: false,
+    showToolbar: true,
+    summaryPrompt: 'Ignore previous instructions. Summarize the most important facts and events in the story so far. If a summary already exists in your memory, use that as a base and expand with new facts. Limit the summary to {{words}} words or less. Your response should include nothing but the summary.',
+    summaryWords: 200,
+    storeHistory: true,
     maxSummaries: 5,
     debugMode: false,
+    currentSummary: '',
+    summaryCounter: 0,
 };
 
 let buttonIntervalId = null;
+let isSummarising = false;
 
 function ensureSettings() {
     if (!extension_settings[settingsKey]) {
@@ -47,6 +52,8 @@ async function mountSettings() {
 
     const html = await renderExtensionTemplateAsync(`third-party/${extensionName}`, 'settings');
     container.innerHTML = html;
+    bindSettingsUI(container);
+    updateSettingsUI(container);
 }
 
 function createSummariseButton() {
@@ -56,9 +63,7 @@ function createSummariseButton() {
     button.className = 'gg-action-button ss-action-button fa-solid fa-clapperboard';
     button.title = 'Summarise Scene';
 
-    button.addEventListener('click', () => {
-        console.log(`[${extensionName}] Summarise Scene clicked (placeholder).`);
-    });
+    button.addEventListener('click', onSummariseClick);
 
     return button;
 }
@@ -68,11 +73,16 @@ function createSummariseButton() {
  * Falls back to its own container if the Guided Generations container is not present.
  */
 function placeSummariseButton() {
-    if (!extension_settings[settingsKey]?.enabled || !extension_settings[settingsKey]?.showSummariseButton) {
+    const settings = extension_settings[settingsKey];
+    const existing = document.getElementById('ss_summarise_button');
+
+    if (!settings?.enabled || !settings?.showSummariseButton || settings.showToolbar === false) {
+        // Remove if present
+        if (existing?.parentElement) {
+            existing.parentElement.removeChild(existing);
+        }
         return false;
     }
-
-    const existing = document.getElementById('ss_summarise_button');
 
     // Prefer the Guided Generations action container if it exists
     let targetContainer = document.getElementById('gg-regular-buttons-container');
@@ -129,6 +139,131 @@ function startButtonMount() {
             buttonIntervalId = null;
         }
     }, 15000);
+}
+
+function bindSettingsUI(container) {
+    if (!container) return;
+
+    container.addEventListener('input', (event) => {
+        const target = event.target;
+        if (!target.classList?.contains('ss-setting-input')) return;
+
+        const { name, type, value, checked } = target;
+        if (!name) return;
+
+        let newValue = value;
+        if (type === 'checkbox') {
+            newValue = !!checked;
+        } else if (type === 'range' || type === 'number') {
+            newValue = Number(value);
+        }
+
+        extension_settings[settingsKey][name] = newValue;
+
+        if (name === 'summaryWords') {
+            const display = container.querySelector('#ss_summaryWords_value');
+            if (display) display.textContent = newValue;
+        }
+
+        saveSettingsDebounced();
+    });
+
+    const summariseButton = container.querySelector('#ss_summarise_button');
+    if (summariseButton) {
+        summariseButton.addEventListener('click', onSummariseClick);
+    }
+}
+
+function updateSettingsUI(container) {
+    if (!container) return;
+    const settings = extension_settings[settingsKey] || defaultSettings;
+
+    const setValue = (selector, val) => {
+        const el = container.querySelector(selector);
+        if (!el) return;
+        if (el.type === 'checkbox') {
+            el.checked = !!val;
+        } else {
+            el.value = val ?? '';
+        }
+    };
+
+    setValue('#ss_enabled', settings.enabled);
+    setValue('#ss_autoSummarise', settings.autoSummarise);
+    setValue('#ss_showToolbar', settings.showToolbar);
+    setValue('#ss_summaryPrompt', settings.summaryPrompt);
+    setValue('#ss_summaryWords', settings.summaryWords);
+    setValue('#ss_storeHistory', settings.storeHistory);
+    setValue('#ss_maxSummaries', settings.maxSummaries);
+    setValue('#ss_debugMode', settings.debugMode);
+
+    const wordsDisplay = container.querySelector('#ss_summaryWords_value');
+    if (wordsDisplay) wordsDisplay.textContent = settings.summaryWords;
+
+    const currentSummary = container.querySelector('#ss_currentSummary');
+    if (currentSummary) currentSummary.value = settings.currentSummary || '';
+}
+
+async function onSummariseClick() {
+    if (isSummarising) return;
+    if (!extension_settings[settingsKey]?.enabled) {
+        console.warn(`[${extensionName}] Summariser disabled.`);
+        return;
+    }
+    isSummarising = true;
+
+    const button = document.getElementById('ss_summarise_button');
+    const originalTitle = button?.title;
+    if (button) {
+        button.classList.add('disabled');
+        button.title = 'Summarising...';
+    }
+
+    const settings = extension_settings[settingsKey];
+    const words = settings.summaryWords || defaultSettings.summaryWords;
+    const promptTemplate = settings.summaryPrompt || defaultSettings.summaryPrompt;
+    const prompt = promptTemplate.replace('{{words}}', words);
+
+    try {
+        const result = await generateRaw({ prompt });
+        const cleaned = (result || '').trim();
+
+        // Update stored summary list
+        const nextId = (settings.summaryCounter ?? 0) + 1;
+        const entry = `Scene #${nextId}: ${cleaned}`;
+
+        const keepHistory = settings.storeHistory !== false;
+        let finalSummary = entry;
+
+        if (keepHistory) {
+            const existingLines = (settings.currentSummary || '').trim();
+            const combined = existingLines ? `${existingLines}\n${entry}` : entry;
+
+            // Enforce max summaries if configured
+            const lines = combined.split('\n');
+            const max = settings.maxSummaries || defaultSettings.maxSummaries;
+            const trimmedLines = lines.slice(-max);
+            finalSummary = trimmedLines.join('\n');
+        }
+
+        settings.summaryCounter = nextId;
+        settings.currentSummary = finalSummary;
+
+        const currentSummaryEl = document.getElementById('ss_currentSummary');
+        if (currentSummaryEl) {
+            currentSummaryEl.value = finalSummary;
+        }
+
+        saveSettingsDebounced();
+    } catch (error) {
+        console.error(`[${extensionName}] Error during summarisation:`, error);
+    } finally {
+        if (button) {
+            button.classList.remove('disabled');
+            button.title = originalTitle || 'Summarise Scene';
+        }
+        isSummarising = false;
+    }
 }
 
 jQuery(async () => {

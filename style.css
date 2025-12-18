@@ -42,3 +42,8 @@
     background-color: var(--SmartThemeHover, #444);
     color: var(--SmartThemeUi, #fff);
 }
+
+.ss-action-button.disabled {
+    opacity: 0.6;
+    pointer-events: none;
+}

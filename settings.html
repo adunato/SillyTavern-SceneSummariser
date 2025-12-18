@@ -10,17 +10,17 @@
                 <h4>General</h4>
                 <div class="setting_item">
                     <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 5px;">
-                        <input type="checkbox" id="ss_enabled" name="enabled" class="ss-setting-input" disabled>
+                        <input type="checkbox" id="ss_enabled" name="enabled" class="ss-setting-input">
                         <label for="ss_enabled">Enable Scene Summariser</label>
                     </div>
-                    <small class="setting_item_description">Placeholder toggle; wiring coming soon.</small>
+                    <small class="setting_item_description">Turns the extension on/off.</small>
                 </div>
                 <div class="setting_item">
                     <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 5px;">
-                        <input type="checkbox" id="ss_autoSummarise" name="autoSummarise" class="ss-setting-input" disabled>
+                        <input type="checkbox" id="ss_autoSummarise" name="autoSummarise" class="ss-setting-input">
                         <label for="ss_autoSummarise">Auto-summarise after messages</label>
                     </div>
-                    <small class="setting_item_description">Matches Guided Generations checkbox layout; no action yet.</small>
+                    <small class="setting_item_description">Planned hook to auto-run after sends (inactive for now).</small>
                 </div>
                 <hr>
             </div>
@@ -29,19 +29,19 @@
                 <h4>Display Options</h4>
                 <div class="setting_item">
                     <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 5px;">
-                        <input type="checkbox" id="ss_showToolbar" name="showToolbar" class="ss-setting-input" disabled>
+                        <input type="checkbox" id="ss_showToolbar" name="showToolbar" class="ss-setting-input">
                         <label for="ss_showToolbar">Show toolbar buttons</label>
                     </div>
-                    <small class="setting_item_description">Placeholder for toolbar visibility control.</small>
+                    <small class="setting_item_description">Hide/show the toolbar button without disabling the extension.</small>
                 </div>
                 <div class="setting_item">
-                    <label for="ss_summaryStyle" style="margin-bottom: 5px; display: block;">Summary style</label>
-                    <select id="ss_summaryStyle" name="summaryStyle" class="ss-setting-input text_pole select_compact" disabled>
-                        <option value="concise">Concise</option>
-                        <option value="detailed">Detailed</option>
-                        <option value="bullet">Bullet Points</option>
-                    </select>
-                    <small class="setting_item_description">Dropdown mirrors Guided Generations layout; inactive for now.</small>
+                    <label for="ss_summaryPrompt" style="margin-bottom: 5px; display: block;">Summary Prompt</label>
+                    <textarea id="ss_summaryPrompt" name="summaryPrompt" class="ss-setting-input text_pole" rows="4" style="width: 100%; resize: vertical;" placeholder="Ignore previous instructions. Summarize the most important facts and events in the story so far. If a summary already exists in your memory, use that as a base and expand with new facts. Limit the summary to {{words}} words or less. Your response should include nothing but the summary."></textarea>
+                    <small class="setting_item_description">Template sent to the LLM. Use {{words}} to inject the word limit.</small>
+                </div>
+                <div class="setting_item">
+                    <label for="ss_summaryWords" style="margin-bottom: 5px; display: block;">Word limit: <span id="ss_summaryWords_value">200</span> words</label>
+                    <input type="range" id="ss_summaryWords" name="summaryWords" class="ss-setting-input" min="50" max="1000" step="10">
                 </div>
                 <hr>
             </div>
@@ -50,15 +50,15 @@
                 <h4>Data Handling</h4>
                 <div class="setting_item">
                     <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 5px;">
-                        <input type="checkbox" id="ss_storeHistory" name="storeHistory" class="ss-setting-input" disabled>
+                        <input type="checkbox" id="ss_storeHistory" name="storeHistory" class="ss-setting-input">
                         <label for="ss_storeHistory">Keep recent scene summaries</label>
                     </div>
-                    <small class="setting_item_description">Placeholder option for persisted summaries.</small>
+                    <small class="setting_item_description">Stores each generated summary in the panel below.</small>
                 </div>
                 <div class="setting_item">
                     <label for="ss_maxSummaries" style="margin-bottom: 5px; display: block;">Maximum stored summaries</label>
-                    <input type="number" id="ss_maxSummaries" name="maxSummaries" class="ss-setting-input text_pole" min="1" max="50" value="5" disabled>
-                    <small class="setting_item_description">Numeric input scaffold to match Guided Generations form variety.</small>
+                    <input type="number" id="ss_maxSummaries" name="maxSummaries" class="ss-setting-input text_pole" min="1" max="50" value="5">
+                    <small class="setting_item_description">Older entries drop off when this limit is exceeded.</small>
                 </div>
                 <hr>
             </div>
@@ -67,18 +67,26 @@
                 <h4>Debug</h4>
                 <div class="setting_item">
                     <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 5px;">
-                        <input type="checkbox" id="ss_debugMode" name="debugMode" class="ss-setting-input" disabled>
+                        <input type="checkbox" id="ss_debugMode" name="debugMode" class="ss-setting-input">
                         <label for="ss_debugMode">Enable debug logging</label>
                     </div>
-                    <small class="setting_item_description">Structure only; hooks will be added with real implementation.</small>
+                    <small class="setting_item_description">Logs to console for troubleshooting.</small>
                     <div style="margin-top: 8px; display: flex; gap: 8px;">
-                        <button type="button" class="btn btn-secondary" style="font-size: 12px; padding: 4px 8px;" disabled>
+                        <button type="button" id="ss_copyLogs" class="btn btn-secondary" style="font-size: 12px; padding: 4px 8px;" disabled>
                             <i class="fa-solid fa-copy"></i> Copy Logs
                         </button>
-                        <button type="button" class="btn btn-secondary" style="font-size: 12px; padding: 4px 8px;" disabled>
+                        <button type="button" id="ss_clearLogs" class="btn btn-secondary" style="font-size: 12px; padding: 4px 8px;" disabled>
                             <i class="fa-solid fa-trash"></i> Clear Logs
                         </button>
                     </div>
+                </div>
+            </div>
+
+            <div class="settings_section">
+                <h4>Current Summary</h4>
+                <div class="setting_item">
+                    <textarea id="ss_currentSummary" class="text_pole" rows="6" readonly style="width: 100%; resize: vertical;"></textarea>
+                    <small class="setting_item_description">Each click of Summarise Scene appends a new entry with an incremental Scene #.</small>
                 </div>
             </div>
         </div>
