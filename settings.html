@@ -36,6 +36,11 @@
                     <label for="ss_summaryWords" style="margin-bottom: 5px; display: block;">Word limit: <span id="ss_summaryWords_value">200</span> words</label>
                     <input type="range" id="ss_summaryWords" name="summaryWords" class="ss-setting-input" min="50" max="1000" step="10">
                 </div>
+                <div class="setting_item">
+                    <label for="ss_maxSummaries" style="margin-bottom: 5px; display: block;">Max stored summaries</label>
+                    <input type="number" id="ss_maxSummaries" name="maxSummaries" class="ss-setting-input text_pole" min="1" max="50" value="5">
+                    <small class="setting_item_description">Older entries drop off when this limit is exceeded.</small>
+                </div>
                 <hr>
             </div>
 
@@ -49,9 +54,11 @@
                     <small class="setting_item_description">Stores each generated summary in the panel below.</small>
                 </div>
                 <div class="setting_item">
-                    <label for="ss_maxSummaries" style="margin-bottom: 5px; display: block;">Maximum stored summaries</label>
-                    <input type="number" id="ss_maxSummaries" name="maxSummaries" class="ss-setting-input text_pole" min="1" max="50" value="5">
-                    <small class="setting_item_description">Older entries drop off when this limit is exceeded.</small>
+                    <label for="ss_storeHistory" style="margin-bottom: 5px; display: block;">Store history</label>
+                    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 5px;">
+                        <input type="checkbox" id="ss_storeHistory" name="storeHistory" class="ss-setting-input">
+                        <label for="ss_storeHistory">Keep previous summaries (append instead of overwrite)</label>
+                    </div>
                 </div>
                 <hr>
             </div>
