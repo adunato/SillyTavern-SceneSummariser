@@ -1,7 +1,13 @@
 // Third-party extensions live under /scripts/extensions/third-party/.
 // Step three levels up to reach the core helpers.
 import { extension_settings, renderExtensionTemplateAsync, getContext } from '../../../extensions.js';
-import { generateRaw, saveSettingsDebounced } from '../../../../script.js';
+import {
+    generateRaw,
+    saveSettingsDebounced,
+    setExtensionPrompt,
+    extension_prompt_types,
+    extension_prompt_roles,
+} from '../../../../script.js';
 
 const extensionName = 'SillyTavern-SceneSummariser';
 const settingsKey = extensionName;
@@ -17,6 +23,11 @@ const defaultSettings = {
     currentSummary: '',
     summaryCounter: 0,
     lastSummarisedIndex: 0,
+    injectEnabled: true,
+    injectPosition: extension_prompt_types.IN_CHAT,
+    injectDepth: 2,
+    injectScan: false,
+    injectRole: extension_prompt_roles.SYSTEM,
 };
 
 let buttonIntervalId = null;
@@ -165,6 +176,11 @@ function bindSettingsUI(container) {
         }
 
         saveSettingsDebounced();
+
+        const injectFields = ['injectEnabled', 'injectPosition', 'injectDepth', 'injectScan', 'injectRole'];
+        if (injectFields.includes(name)) {
+            applyInjection();
+        }
     });
 
     const summariseButton = container.querySelector('#ss_summarise_button');
@@ -194,12 +210,19 @@ function updateSettingsUI(container) {
     setValue('#ss_storeHistory', settings.storeHistory);
     setValue('#ss_maxSummaries', settings.maxSummaries);
     setValue('#ss_debugMode', settings.debugMode);
+    setValue('#ss_injectEnabled', settings.injectEnabled);
+    setValue('#ss_injectPosition', settings.injectPosition);
+    setValue('#ss_injectDepth', settings.injectDepth);
+    setValue('#ss_injectScan', settings.injectScan);
+    setValue('#ss_injectRole', settings.injectRole);
 
     const wordsDisplay = container.querySelector('#ss_summaryWords_value');
     if (wordsDisplay) wordsDisplay.textContent = settings.summaryWords;
 
     const currentSummary = container.querySelector('#ss_currentSummary');
     if (currentSummary) currentSummary.value = settings.currentSummary || '';
+
+    applyInjection();
 }
 
 async function onSummariseClick() {
@@ -287,6 +310,7 @@ async function onSummariseClick() {
             currentSummaryEl.value = finalSummary;
         }
 
+        applyInjection();
         saveSettingsDebounced();
     } catch (error) {
         console.error(`[${extensionName}] Error during summarisation:`, error);
@@ -296,6 +320,30 @@ async function onSummariseClick() {
             button.title = originalTitle || 'Summarise Scene';
         }
         isSummarising = false;
+    }
+}
+
+function applyInjection() {
+    const settings = extension_settings[settingsKey];
+    if (!settings || !settings.injectEnabled || !settings.enabled) {
+        try {
+            setExtensionPrompt(extensionName, '', extension_prompt_types.IN_CHAT, 0, false, extension_prompt_roles.SYSTEM);
+        } catch (err) {
+            console.error(`[${extensionName}] Failed to clear injection:`, err);
+        }
+        return;
+    }
+
+    const value = settings.currentSummary || '';
+    const position = Number(settings.injectPosition ?? extension_prompt_types.IN_CHAT);
+    const depth = Number(settings.injectDepth ?? 2);
+    const scan = !!settings.injectScan;
+    const role = Number(settings.injectRole ?? extension_prompt_roles.SYSTEM);
+
+    try {
+        setExtensionPrompt(extensionName, value, position, depth, scan, role);
+    } catch (err) {
+        console.error(`[${extensionName}] Failed to set injection prompt:`, err);
     }
 }
 
