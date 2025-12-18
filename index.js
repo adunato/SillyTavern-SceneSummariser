@@ -8,9 +8,7 @@ const settingsKey = extensionName;
 
 const defaultSettings = {
     enabled: true,
-    showSummariseButton: true,
     autoSummarise: false,
-    showToolbar: true,
     summaryPrompt: 'Ignore previous instructions. Summarize the most important facts and events in the story so far. If a summary already exists in your memory, use that as a base and expand with new facts. Limit the summary to {{words}} words or less. Your response should include nothing but the summary.',
     summaryWords: 200,
     storeHistory: true,
@@ -76,7 +74,7 @@ function placeSummariseButton() {
     const settings = extension_settings[settingsKey];
     const existing = document.getElementById('ss_summarise_button');
 
-    if (!settings?.enabled || !settings?.showSummariseButton || settings.showToolbar === false) {
+    if (!settings?.enabled) {
         // Remove if present
         if (existing?.parentElement) {
             existing.parentElement.removeChild(existing);
@@ -190,7 +188,6 @@ function updateSettingsUI(container) {
 
     setValue('#ss_enabled', settings.enabled);
     setValue('#ss_autoSummarise', settings.autoSummarise);
-    setValue('#ss_showToolbar', settings.showToolbar);
     setValue('#ss_summaryPrompt', settings.summaryPrompt);
     setValue('#ss_summaryWords', settings.summaryWords);
     setValue('#ss_storeHistory', settings.storeHistory);

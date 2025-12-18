@@ -28,13 +28,6 @@
             <div class="settings_section">
                 <h4>Display Options</h4>
                 <div class="setting_item">
-                    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 5px;">
-                        <input type="checkbox" id="ss_showToolbar" name="showToolbar" class="ss-setting-input">
-                        <label for="ss_showToolbar">Show toolbar buttons</label>
-                    </div>
-                    <small class="setting_item_description">Hide/show the toolbar button without disabling the extension.</small>
-                </div>
-                <div class="setting_item">
                     <label for="ss_summaryPrompt" style="margin-bottom: 5px; display: block;">Summary Prompt</label>
                     <textarea id="ss_summaryPrompt" name="summaryPrompt" class="ss-setting-input text_pole" rows="4" style="width: 100%; resize: vertical;" placeholder="Ignore previous instructions. Summarize the most important facts and events in the story so far. If a summary already exists in your memory, use that as a base and expand with new facts. Limit the summary to {{words}} words or less. Your response should include nothing but the summary."></textarea>
                     <small class="setting_item_description">Template sent to the LLM. Use {{words}} to inject the word limit.</small>
