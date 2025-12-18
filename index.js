@@ -179,7 +179,7 @@ function bindSettingsUI(container) {
         let newValue = value;
         if (type === 'checkbox') {
             newValue = !!checked;
-        } else if (type === 'range' || type === 'number') {
+        } else if (type === 'range' || type === 'number' || type === 'radio') {
             newValue = Number(value);
         }
 
@@ -229,6 +229,8 @@ function updateSettingsUI(container) {
         if (!el) return;
         if (el.type === 'checkbox') {
             el.checked = !!val;
+        } else if (el.type === 'radio') {
+            el.checked = String(el.value) === String(val);
         } else {
             el.value = val ?? '';
         }
@@ -248,8 +250,8 @@ function updateSettingsUI(container) {
     setValue('#ss_injectTemplate', settings.injectTemplate);
 
     // Radio for position
-    const posRadio = container.querySelector(`input[name="ss_injectPosition"][value="${settings.injectPosition}"]`);
-    if (posRadio) posRadio.checked = true;
+    const radios = container.querySelectorAll('input[name="injectPosition"]');
+    radios.forEach(r => r.checked = String(r.value) === String(settings.injectPosition));
 
     const wordsDisplay = container.querySelector('#ss_summaryWords_value');
     if (wordsDisplay) wordsDisplay.textContent = settings.summaryWords;
