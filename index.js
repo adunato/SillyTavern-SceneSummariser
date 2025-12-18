@@ -24,7 +24,7 @@ const defaultSettings = {
     summaryCounter: 0,
     lastSummarisedIndex: 0,
     injectEnabled: true,
-    injectPosition: extension_prompt_types.IN_CHAT,
+    injectPosition: extension_prompt_types.IN_PROMPT,
     injectDepth: 2,
     injectScan: false,
     injectRole: extension_prompt_roles.SYSTEM,
