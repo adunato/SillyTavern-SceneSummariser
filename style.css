@@ -22,3 +22,23 @@
     margin-top: 4px;
     color: var(--text-dimmed, #9aa0a6);
 }
+
+/* Ensure the Summarise button matches Guided Generations styling even if GG CSS isn't loaded */
+.ss-action-button {
+    padding: 5px 8px;
+    border: 1px solid var(--SmartThemeBodyColor, #ccc);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 1.1em;
+    display: inline-flex;
+    align-items: center;
+    transition: background-color 0.2s, color 0.2s;
+    background-color: var(--SmartThemeBg, #222);
+    color: var(--SmartThemeBodyColor, #eee);
+    gap: 6px;
+}
+
+.ss-action-button:hover {
+    background-color: var(--SmartThemeHover, #444);
+    color: var(--SmartThemeUi, #fff);
+}
