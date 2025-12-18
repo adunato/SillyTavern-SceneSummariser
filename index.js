@@ -278,9 +278,8 @@ async function onSummariseClick() {
         }
 
         settings.summaryCounter = nextId;
-        settings.currentSummary = keepHistory
-            ? `${settings.currentSummary ? `${settings.currentSummary}\n` : ''}${entry}`
-            : finalSummary;
+        // Use the trimmed/combined history so we keep appending while enforcing max history
+        settings.currentSummary = keepHistory ? finalSummary : entry;
         settings.lastSummarisedIndex = chat.length;
 
         const currentSummaryEl = document.getElementById('ss_currentSummary');
