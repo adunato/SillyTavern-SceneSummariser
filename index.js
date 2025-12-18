@@ -28,6 +28,7 @@ const defaultSettings = {
     injectDepth: 2,
     injectScan: false,
     injectRole: extension_prompt_roles.SYSTEM,
+    injectTemplate: '[Summary: {{summary}}]',
 };
 
 let buttonIntervalId = null;
@@ -211,10 +212,14 @@ function updateSettingsUI(container) {
     setValue('#ss_maxSummaries', settings.maxSummaries);
     setValue('#ss_debugMode', settings.debugMode);
     setValue('#ss_injectEnabled', settings.injectEnabled);
-    setValue('#ss_injectPosition', settings.injectPosition);
     setValue('#ss_injectDepth', settings.injectDepth);
     setValue('#ss_injectScan', settings.injectScan);
     setValue('#ss_injectRole', settings.injectRole);
+    setValue('#ss_injectTemplate', settings.injectTemplate);
+
+    // Radio for position
+    const posRadio = container.querySelector(`input[name="ss_injectPosition"][value="${settings.injectPosition}"]`);
+    if (posRadio) posRadio.checked = true;
 
     const wordsDisplay = container.querySelector('#ss_summaryWords_value');
     if (wordsDisplay) wordsDisplay.textContent = settings.summaryWords;
@@ -327,15 +332,34 @@ function applyInjection() {
     const settings = extension_settings[settingsKey];
     if (!settings || !settings.injectEnabled || !settings.enabled) {
         try {
-            setExtensionPrompt(extensionName, '', extension_prompt_types.IN_CHAT, 0, false, extension_prompt_roles.SYSTEM);
+        setExtensionPrompt(extensionName, '', extension_prompt_types.IN_PROMPT, 0, false, extension_prompt_roles.SYSTEM);
         } catch (err) {
             console.error(`[${extensionName}] Failed to clear injection:`, err);
         }
         return;
     }
 
-    const value = settings.currentSummary || '';
-    const position = Number(settings.injectPosition ?? extension_prompt_types.IN_CHAT);
+    const ctx = getContext();
+    const chat = ctx?.chat || [];
+    const lastIdx = Math.min(settings.lastSummarisedIndex || 0, chat.length);
+    const newMessages = chat.slice(lastIdx);
+    const name1 = ctx?.name1 || 'User';
+    const name2 = ctx?.name2 || 'Character';
+    const transcript = newMessages
+        .slice(-50)
+        .map((m) => {
+            const speaker = m.name || (m.is_user ? name1 : name2);
+            return `${speaker}: ${m.mes || ''}`.trim();
+        })
+        .join('\n');
+
+    const template = settings.injectTemplate || defaultSettings.injectTemplate;
+    const value = template
+        .replace('{{summary}}', settings.currentSummary || '')
+        .replace('{{last_messages}}', transcript)
+        .replace('{{words}}', settings.summaryWords ?? defaultSettings.summaryWords);
+
+    const position = Number(settings.injectPosition ?? extension_prompt_types.IN_PROMPT);
     const depth = Number(settings.injectDepth ?? 2);
     const scan = !!settings.injectScan;
     const role = Number(settings.injectRole ?? extension_prompt_roles.SYSTEM);

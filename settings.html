@@ -54,33 +54,42 @@
                     <small class="setting_item_description">Writes the current summary into the extension prompt stack used at generation time.</small>
                 </div>
                 <div class="setting_item">
-                    <label for="ss_injectPosition" style="margin-bottom: 5px; display: block;">Injection position</label>
-                    <select id="ss_injectPosition" name="injectPosition" class="ss-setting-input text_pole select_compact">
-                        <option value="0">In prompt</option>
-                        <option value="1">In chat</option>
-                        <option value="2">Before prompt</option>
-                        <option value="-1">None</option>
-                    </select>
+                    <label for="ss_injectTemplate" style="margin-bottom: 5px; display: block;">Injection Template</label>
+                    <textarea id="ss_injectTemplate" name="injectTemplate" class="ss-setting-input text_pole" rows="2" style="width: 100%; resize: vertical;" placeholder="[Summary: {{summary}}]"></textarea>
+                    <small class="setting_item_description">Variables: {{summary}} (current summary), {{last_messages}} (messages since last summary), {{words}} (word limit).</small>
                 </div>
                 <div class="setting_item">
-                    <label for="ss_injectRole" style="margin-bottom: 5px; display: block;">Injection role</label>
-                    <select id="ss_injectRole" name="injectRole" class="ss-setting-input text_pole select_compact">
-                        <option value="0">System</option>
-                        <option value="2">Assistant</option>
-                        <option value="1">User</option>
-                    </select>
-                </div>
-                <div class="setting_item">
-                    <label for="ss_injectDepth" style="margin-bottom: 5px; display: block;">Injection depth</label>
-                    <input type="number" id="ss_injectDepth" name="injectDepth" class="ss-setting-input text_pole" min="0" max="10000" value="2">
-                    <small class="setting_item_description">How far back the injection is anchored (matches core extension prompt semantics).</small>
+                    <label style="margin-bottom: 5px; display: block;">Injection Position</label>
+                    <label class="checkbox_label">
+                        <input type="radio" name="ss_injectPosition" value="-1" class="ss-setting-input">
+                        <span>None (not injected)</span>
+                    </label>
+                    <label class="checkbox_label">
+                        <input type="radio" name="ss_injectPosition" value="2" class="ss-setting-input">
+                        <span>Before Main Prompt / Story String</span>
+                    </label>
+                    <label class="checkbox_label">
+                        <input type="radio" name="ss_injectPosition" value="0" class="ss-setting-input">
+                        <span>After Main Prompt / Story String</span>
+                    </label>
+                    <label class="checkbox_label" style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                        <input type="radio" name="ss_injectPosition" value="1" class="ss-setting-input">
+                        <span>In-chat @ Depth</span>
+                        <input type="number" id="ss_injectDepth" name="injectDepth" class="ss-setting-input text_pole" min="0" max="10000" value="2" style="width: 80px;">
+                        <span>as</span>
+                        <select id="ss_injectRole" name="injectRole" class="ss-setting-input text_pole select_compact">
+                            <option value="0">System</option>
+                            <option value="1">User</option>
+                            <option value="2">Assistant</option>
+                        </select>
+                    </label>
                 </div>
                 <div class="setting_item">
                     <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 5px;">
                         <input type="checkbox" id="ss_injectScan" name="injectScan" class="ss-setting-input">
-                        <label for="ss_injectScan">Enable scan</label>
+                        <label for="ss_injectScan">Include in scanning</label>
                     </div>
-                    <small class="setting_item_description">Whether the injection should be scanned along with context (advanced; mirrors built-in memory).</small>
+                    <small class="setting_item_description">Whether the injection participates in scanning (mirrors built-in memory behaviour).</small>
                 </div>
                 <hr>
             </div>
