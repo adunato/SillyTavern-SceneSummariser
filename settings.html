@@ -30,7 +30,7 @@
                 <div class="setting_item">
                     <label for="ss_summaryPrompt" style="margin-bottom: 5px; display: block;">Summary Prompt</label>
                     <textarea id="ss_summaryPrompt" name="summaryPrompt" class="ss-setting-input text_pole" rows="4" style="width: 100%; resize: vertical;" placeholder="Ignore previous instructions. Summarize the most important facts and events in the story so far. If a summary already exists in your memory, use that as a base and expand with new facts. Limit the summary to {{words}} words or less. Your response should include nothing but the summary."></textarea>
-                    <small class="setting_item_description">Template sent to the LLM. Use {{words}} to inject the word limit.</small>
+                    <small class="setting_item_description">Template sent to the LLM. Variables: {{words}} (slider value), {{summary}} (current summary), {{last_messages}} (messages since last summary).</small>
                 </div>
                 <div class="setting_item">
                     <label for="ss_summaryWords" style="margin-bottom: 5px; display: block;">Word limit: <span id="ss_summaryWords_value">200</span> words</label>
