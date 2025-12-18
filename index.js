@@ -16,6 +16,7 @@ const defaultSettings = {
     debugMode: false,
     currentSummary: '',
     summaryCounter: 0,
+    lastSummarisedIndex: 0,
 };
 
 let buttonIntervalId = null;
@@ -224,11 +225,24 @@ async function onSummariseClick() {
     // Build chat transcript for context
     const ctx = getContext();
     const chat = ctx?.chat || [];
+    const lastIdx = Math.min(settings.lastSummarisedIndex || 0, chat.length);
+    const newMessages = chat.slice(lastIdx);
+
+    if (!newMessages.length) {
+        console.warn(`[${extensionName}] No new messages since last summary; skipping.`);
+        if (button) {
+            button.classList.remove('disabled');
+            button.title = originalTitle || 'Summarise Scene';
+        }
+        isSummarising = false;
+        return;
+    }
+
     const name1 = ctx?.name1 || 'User';
     const name2 = ctx?.name2 || 'Character';
 
-    const transcript = chat
-        .slice(-50) // last 50 messages
+    const transcript = newMessages
+        .slice(-50) // limit to most recent chunk to keep prompt small
         .map((m) => {
             const speaker = m.name || (m.is_user ? name1 : name2);
             return `${speaker}: ${m.mes || ''}`.trim();
@@ -261,6 +275,7 @@ async function onSummariseClick() {
 
         settings.summaryCounter = nextId;
         settings.currentSummary = finalSummary;
+        settings.lastSummarisedIndex = chat.length;
 
         const currentSummaryEl = document.getElementById('ss_currentSummary');
         if (currentSummaryEl) {
