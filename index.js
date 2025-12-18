@@ -7,6 +7,8 @@ import {
     setExtensionPrompt,
     extension_prompt_types,
     extension_prompt_roles,
+    eventSource,
+    event_types,
 } from '../../../../script.js';
 
 const extensionName = 'SillyTavern-SceneSummariser';
@@ -29,6 +31,7 @@ const defaultSettings = {
     injectScan: false,
     injectRole: extension_prompt_roles.SYSTEM,
     injectTemplate: '[Summary: {{summary}}]',
+    limitToUnsummarised: false,
 };
 
 let buttonIntervalId = null;
@@ -196,6 +199,10 @@ function bindSettingsUI(container) {
         if (injectFields.includes(name)) {
             applyInjection();
         }
+
+        if (name === 'limitToUnsummarised') {
+            logDebug('log', 'Updated limitToUnsummarised', newValue);
+        }
     });
 
     // Debug controls
@@ -248,6 +255,7 @@ function updateSettingsUI(container) {
     setValue('#ss_injectScan', settings.injectScan);
     setValue('#ss_injectRole', settings.injectRole);
     setValue('#ss_injectTemplate', settings.injectTemplate);
+    setValue('#ss_limitToUnsummarised', settings.limitToUnsummarised);
 
     // Radio for position
     const radios = container.querySelectorAll('input[name="injectPosition"]');
@@ -423,4 +431,34 @@ jQuery(async () => {
     ensureSettings();
     await mountSettings();
     startButtonMount();
+    try {
+        eventSource?.on(event_types.CHAT_COMPLETION_PROMPT_READY, filterChatCompletionPrompt);
+        logDebug('log', 'Registered prompt filter listener');
+    } catch (err) {
+        console.error(`[${extensionName}] Failed to register prompt filter:`, err);
+    }
 });
+function filterChatCompletionPrompt(eventData) {
+    const settings = extension_settings[settingsKey];
+    if (!settings?.limitToUnsummarised) return;
+    if (!Array.isArray(eventData?.chat)) return;
+
+    const ctx = getContext();
+    const chat = ctx?.chat || [];
+    const lastIdx = Math.min(settings.lastSummarisedIndex || 0, chat.length);
+    const messagesAfter = chat.length - lastIdx;
+
+    if (messagesAfter <= 0) {
+        logDebug('warn', 'No messages after last summary; leaving prompt untouched');
+        return;
+    }
+
+    const sliced = eventData.chat.slice(-messagesAfter);
+    if (sliced.length === 0) {
+        logDebug('warn', 'Sliced prompt empty; leaving original');
+        return;
+    }
+
+    eventData.chat = sliced;
+    logDebug('log', `Trimmed chat prompt to ${sliced.length} messages (after last summary)`);
+}
