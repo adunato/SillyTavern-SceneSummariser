@@ -251,7 +251,9 @@ async function onSummariseClick() {
         })
         .join('\n');
 
-    const prompt = `${promptText}\n\nChat history:\n${transcript}`;
+    const prompt = promptText
+        .replace('{{last_messages}}', transcript || '(no new messages)')
+        + (!promptText.includes('{{last_messages}}') ? `\n\nChat history:\n${transcript}` : '');
 
     try {
         const result = await generateRaw({ prompt });
