@@ -220,7 +220,9 @@ async function onSummariseClick() {
     const settings = extension_settings[settingsKey];
     const words = settings.summaryWords || defaultSettings.summaryWords;
     const promptTemplate = settings.summaryPrompt || defaultSettings.summaryPrompt;
-    const promptText = promptTemplate.replace('{{words}}', words);
+    const promptText = promptTemplate
+        .replace('{{words}}', words)
+        .replace('{{summary}}', settings.currentSummary || '');
 
     // Build chat transcript for context
     const ctx = getContext();
@@ -274,7 +276,9 @@ async function onSummariseClick() {
         }
 
         settings.summaryCounter = nextId;
-        settings.currentSummary = finalSummary;
+        settings.currentSummary = keepHistory
+            ? `${settings.currentSummary ? `${settings.currentSummary}\n` : ''}${entry}`
+            : finalSummary;
         settings.lastSummarisedIndex = chat.length;
 
         const currentSummaryEl = document.getElementById('ss_currentSummary');
