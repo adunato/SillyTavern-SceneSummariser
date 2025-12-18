@@ -32,6 +32,10 @@ const defaultSettings = {
     injectRole: extension_prompt_roles.SYSTEM,
     injectTemplate: '[Summary: {{summary}}]',
     limitToUnsummarised: false,
+    insertSceneBreak: true,
+    trimAfterSceneBreak: true,
+    sceneBreakMarkerId: '',
+    sceneBreakMesId: null,
 };
 
 let buttonIntervalId = null;
@@ -203,6 +207,10 @@ function bindSettingsUI(container) {
         if (name === 'limitToUnsummarised') {
             logDebug('log', 'Updated limitToUnsummarised', newValue);
         }
+
+        if (name === 'insertSceneBreak' || name === 'trimAfterSceneBreak') {
+            logDebug('log', `Updated ${name}`, newValue);
+        }
     });
 
     // Debug controls
@@ -256,6 +264,8 @@ function updateSettingsUI(container) {
     setValue('#ss_injectRole', settings.injectRole);
     setValue('#ss_injectTemplate', settings.injectTemplate);
     setValue('#ss_limitToUnsummarised', settings.limitToUnsummarised);
+    setValue('#ss_insertSceneBreak', settings.insertSceneBreak);
+    setValue('#ss_trimAfterSceneBreak', settings.trimAfterSceneBreak);
 
     // Radio for position
     const radios = container.querySelectorAll('input[name="injectPosition"]');
@@ -359,6 +369,10 @@ async function onSummariseClick() {
             currentSummaryEl.value = finalSummary;
         }
 
+        if (settings.insertSceneBreak) {
+            await insertSceneBreakMarker();
+        }
+
         applyInjection();
         saveSettingsDebounced();
     } catch (error) {
@@ -427,6 +441,42 @@ function applyInjection() {
     }
 }
 
+async function insertSceneBreakMarker() {
+    const ctx = getContext();
+    if (!ctx || !Array.isArray(ctx.chat)) return;
+
+    const markerId = `scene-break-${Date.now()}`;
+    const markerHtml = `<details class="scene-summary-break" data-marker-id="${markerId}"><summary>📑 Scene Summary Boundary</summary><div>Summaries above; new messages below.</div></details>`;
+    const message = {
+        name: extensionName,
+        is_user: false,
+        is_system: true,
+        mes: markerHtml,
+        extra: {
+            scene_summariser_marker: true,
+            marker_id: markerId,
+        },
+        send_date: Date.now(),
+    };
+
+    ctx.chat.push(message);
+    const messageId = ctx.chat.length - 1;
+    try {
+        await eventSource.emit(event_types.MESSAGE_RECEIVED, messageId, 'extension');
+        ctx.addOneMessage(message);
+        await eventSource.emit(event_types.CHARACTER_MESSAGE_RENDERED, messageId, 'extension');
+        if (typeof ctx.saveChat === 'function') {
+            await ctx.saveChat();
+        }
+    } catch (err) {
+        console.error(`[${extensionName}] Failed to add scene break marker:`, err);
+    }
+
+    extension_settings[settingsKey].sceneBreakMarkerId = markerId;
+    extension_settings[settingsKey].sceneBreakMesId = messageId;
+    logDebug('log', 'Inserted scene break marker', markerId, messageId);
+}
+
 jQuery(async () => {
     ensureSettings();
     await mountSettings();
@@ -443,6 +493,24 @@ function filterChatCompletionPrompt(eventData) {
     if (!settings?.limitToUnsummarised) return;
     if (!Array.isArray(eventData?.chat)) return;
 
+    // Prefer precise trim using scene break marker if available
+    if (settings.trimAfterSceneBreak && settings.sceneBreakMarkerId && settings.sceneBreakMesId !== null) {
+        const markerIndex = eventData.chat.findIndex(m =>
+            m?.mesid === settings.sceneBreakMesId ||
+            m?.extra?.marker_id === settings.sceneBreakMarkerId ||
+            (typeof m?.mes === 'string' && m.mes.includes(settings.sceneBreakMarkerId))
+        );
+
+        if (markerIndex !== -1 && markerIndex < eventData.chat.length - 1) {
+            eventData.chat = eventData.chat.slice(markerIndex + 1);
+            logDebug('log', `Trimmed prompt after marker (mesid=${settings.sceneBreakMesId}) to ${eventData.chat.length} messages`);
+            return;
+        } else {
+            logDebug('warn', 'Marker not found in prompt; falling back to unsummarised slice');
+        }
+    }
+
+    // Fallback: slice by lastSummarisedIndex
     const ctx = getContext();
     const chat = ctx?.chat || [];
     const lastIdx = Math.min(settings.lastSummarisedIndex || 0, chat.length);

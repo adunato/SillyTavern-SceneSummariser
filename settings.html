@@ -110,6 +110,20 @@
                     </div>
                     <small class="setting_item_description">When enabled, only messages after the last summary are sent to the main prompt (chat completion only).</small>
                 </div>
+                <div class="setting_item">
+                    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 5px;">
+                        <input type="checkbox" id="ss_insertSceneBreak" name="insertSceneBreak" class="ss-setting-input">
+                        <label for="ss_insertSceneBreak">Insert scene break marker after summary</label>
+                    </div>
+                    <small class="setting_item_description">Adds a visible boundary message in chat to mark where the last summary ended.</small>
+                </div>
+                <div class="setting_item">
+                    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 5px;">
+                        <input type="checkbox" id="ss_trimAfterSceneBreak" name="trimAfterSceneBreak" class="ss-setting-input">
+                        <label for="ss_trimAfterSceneBreak">Trim prompt after marker (precise)</label>
+                    </div>
+                    <small class="setting_item_description">When enabled, prompt is sliced to messages after the marker. Uses marker ID if present; falls back to unsummarised-slice logic.</small>
+                </div>
                 <hr>
             </div>
 
