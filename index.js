@@ -54,6 +54,11 @@ function getActiveChatId() {
     return chatId ?? '__no_chat__';
 }
 
+function getActiveIntegrity() {
+    const ctx = getContext();
+    return ctx?.chatMetadata?.integrity || null;
+}
+
 function pullLegacyState(settings) {
     const legacy = {};
     let found = false;
@@ -71,13 +76,22 @@ function getChatState(chatId = null) {
     ensureSettings();
     const settings = extension_settings[settingsKey];
     const activeChatId = chatId || getActiveChatId();
+    const integrity = getActiveIntegrity();
 
     if (!settings.chatStates[activeChatId]) {
         const legacy = pullLegacyState(settings);
+        const integrityState = integrity && settings.chatStatesByIntegrity?.[integrity];
+
         settings.chatStates[activeChatId] = {
             ...chatStateDefaults,
-            ...(legacy || {}),
+            ...(integrityState || legacy || {}),
         };
+    }
+
+    // Keep a by-integrity cache so forks that carry integrity can re-use state
+    if (integrity) {
+        if (!settings.chatStatesByIntegrity) settings.chatStatesByIntegrity = {};
+        settings.chatStatesByIntegrity[integrity] = settings.chatStates[activeChatId];
     }
 
     return settings.chatStates[activeChatId];
@@ -109,6 +123,9 @@ function ensureSettings() {
 
     if (!extension_settings[settingsKey].chatStates || typeof extension_settings[settingsKey].chatStates !== 'object') {
         extension_settings[settingsKey].chatStates = {};
+    }
+    if (!extension_settings[settingsKey].chatStatesByIntegrity || typeof extension_settings[settingsKey].chatStatesByIntegrity !== 'object') {
+        extension_settings[settingsKey].chatStatesByIntegrity = {};
     }
 }
 
