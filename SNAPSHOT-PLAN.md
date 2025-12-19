@@ -13,7 +13,6 @@ Goal: add fine-grained snapshot management so users can view, edit, regenerate, 
   - `toIndex: number` (chat index end, exclusive)
   - `words?: number`, `model?: string`, `source: 'manual' | 'auto'`
   - `markerId?: string`, `messageId?: number` (for scene break)
-- Add `activeSnapshotId?: number` per chat to pick what gets injected.
 - Keep `chatStatesByIntegrity` so forks (same `chat_metadata.integrity`) reuse snapshots.
 
 ## 2) Migration / persistence - OUT OF SCOPE
@@ -29,8 +28,8 @@ Goal: add fine-grained snapshot management so users can view, edit, regenerate, 
   expands the associated section.
 - “Snapshots” section (inside the Summary drawer):
   - List/table of snapshots: Title (editable inline), Created (relative), Range (`fromIndex–toIndex`), Words, Source.
-  - Row actions: View, Edit, Regenerate, Delete, Pin/Inject.
-  - Global controls: “New snapshot” (runs summarise), “Use latest” toggle (clears active to latest), “Copy text”.
+- Row actions: View, Edit, Regenerate, Delete.
+- Global controls: “New snapshot” (runs summarise), “Copy text”.
   - Badges: Active snapshot indicator; Pinned flag.
   - Empty state with CTA to Summarise.
 
@@ -39,7 +38,6 @@ Goal: add fine-grained snapshot management so users can view, edit, regenerate, 
 - Edit: inline textarea, Save updates `text` and optional `title`.
 - Delete: remove snapshot; if it was active, fall back to latest snapshot (or none).
 - Regenerate: rerun summarise over stored `fromIndex..toIndex` with current prompt/word limit; overwrite that snapshot (update `text`, `createdAt`, optional `words`, `model`).
-- Pin/Inject: set `activeSnapshotId` to snapshot.id; “Use latest” clears this and always picks newest.
 - New snapshot: reuse current summarise flow, but store as a snapshot object.
 
 ## 5) Summarisation flow changes
@@ -53,9 +51,7 @@ Goal: add fine-grained snapshot management so users can view, edit, regenerate, 
 - If `storeHistory` is enabled and desired, allow injection to optionally concatenate last N snapshots (configurable later).
 
 ## 6) Injection & prompt trimming
-- `applyInjection`: resolve snapshot to inject:
-  - If `activeSnapshotId` set, use that snapshot’s `text`.
-  - Else use latest snapshot (or concatenated recent if history mode).
+- `applyInjection`: always injects the latest snapshot’s `text` (or concatenated recent if history mode is enabled). No manual selection of older snapshots, since summaries are sequential.
 - `filterChatCompletionPrompt`: unchanged logic (still trims after last summary index or marker).
 
 ## 7) UX polish / safeguards
