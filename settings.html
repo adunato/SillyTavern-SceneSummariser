@@ -1,166 +1,164 @@
-<!-- Scene Summariser Settings Panel -->
+<style>
+    /* Lorebook-style Accordion CSS for Scene Summariser */
+    .ss-snapshot-item {
+        background-color: var(--grey30);
+        border: 1px solid var(--grey40);
+        margin-bottom: 5px;
+        border-radius: 5px;
+        overflow: hidden;
+    }
+
+    .ss-snapshot-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 8px 10px;
+        background-color: var(--grey20);
+        cursor: pointer;
+        user-select: none;
+        transition: background-color 0.2s;
+    }
+
+    .ss-snapshot-header:hover {
+        background-color: var(--grey40);
+    }
+
+    .ss-snapshot-header-left {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-grow: 1;
+        overflow: hidden;
+    }
+
+    .ss-caret {
+        transition: transform 0.2s;
+        color: var(--grey70);
+    }
+
+    .ss-snapshot-item.expanded .ss-caret {
+        transform: rotate(90deg);
+    }
+
+    .ss-snapshot-title {
+        font-weight: bold;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .ss-snapshot-meta {
+        font-size: 0.85em;
+        color: var(--grey70);
+        margin-left: auto;
+        margin-right: 10px;
+    }
+
+    .ss-snapshot-body {
+        display: none;
+        padding: 10px;
+        background-color: var(--grey10);
+        border-top: 1px solid var(--grey40);
+    }
+
+    .ss-snapshot-item.expanded .ss-snapshot-body {
+        display: block;
+    }
+
+    .ss-action-bar {
+        display: flex;
+        gap: 5px;
+        margin-top: 10px;
+        flex-wrap: wrap;
+    }
+
+    .ss-delete-icon {
+        color: var(--smart-theme-red);
+        opacity: 0.7;
+        transition: opacity 0.2s;
+        cursor: pointer;
+    }
+    .ss-delete-icon:hover { opacity: 1; }
+
+    .ss-header-buttons { margin-left: auto; }
+
+    .ss-snapshots-container { margin-top: 8px; }
+</style>
+
 <div id="ss_drawer" class="inline-drawer SillyTavern-SceneSummariser-settingslist">
     <div class="inline-drawer-toggle inline-drawer-header">
         <b>Scene Summariser</b>
         <div class="inline-drawer-icon fa-solid fa-circle-chevron-down right"></div>
     </div>
+    
     <div class="inline-drawer-content">
-        <div class="setting_item" style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+        <div class="setting_item" style="display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom: 10px;">
             <label style="display:flex; align-items:center; gap:8px; margin:0;">
                 <input type="checkbox" id="ss_enabled" name="enabled" class="ss-setting-input">
-                <span>Enable Scene Summariser</span>
+                <span>Enable</span>
             </label>
-            <div class="ss-header-buttons" style="display:flex; gap:8px; flex-wrap:wrap;">
-                <button type="button" class="menu_button" data-ss-action="toggle-settings">Summariser Settings</button>
-                <button type="button" class="menu_button" data-ss-action="toggle-summary">Summary</button>
+            <div class="ss-header-buttons" style="display:flex; gap:5px; flex-wrap:wrap;">
+                <button type="button" class="menu_button" data-ss-action="toggle-settings"><i class="fa-solid fa-gear"></i> Settings</button>
+                <button type="button" class="menu_button" data-ss-action="toggle-summary"><i class="fa-solid fa-list"></i> Snapshots</button>
             </div>
         </div>
 
-    <div id="ss_settings_panel" class="ss-panel" style="display:none;">
-        <div class="settings_section">
-            <h4>General</h4>
-            <div class="setting_item">
-                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 5px;">
-                    <input type="checkbox" id="ss_autoSummarise" name="autoSummarise" class="ss-setting-input">
-                    <label for="ss_autoSummarise">Auto-summarise after messages</label>
+        <div id="ss_settings_panel" class="ss-panel" style="display:none; padding: 10px; background: var(--grey10); border-radius: 5px; margin-bottom: 10px;">
+            <div class="settings_section">
+                <h4>General &amp; Generation</h4>
+                <div class="setting_item">
+                    <label>Summary Prompt</label>
+                    <textarea id="ss_summaryPrompt" name="summaryPrompt" class="ss-setting-input text_pole" rows="3" placeholder="Prompt used to generate summaries..."></textarea>
                 </div>
-                <small class="setting_item_description">Planned hook to auto-run after sends (inactive for now).</small>
-            </div>
-            <hr>
-        </div>
-
-        <div class="settings_section">
-            <h4>Display Options</h4>
-            <div class="setting_item">
-                <label for="ss_summaryPrompt" style="margin-bottom: 5px; display: block;">Summary Prompt</label>
-                <textarea id="ss_summaryPrompt" name="summaryPrompt" class="ss-setting-input text_pole" rows="4" style="width: 100%; resize: vertical;" placeholder="Ignore previous instructions. Summarize the most important facts and events in the story so far. If a summary already exists in your memory, use that as a base and expand with new facts. Limit the summary to {{words}} words or less. Your response should include nothing but the summary."></textarea>
-                <small class="setting_item_description">Template sent to the LLM. Variables: {{words}} (slider value), {{summary}} (current summary), {{last_messages}} (messages since last summary).</small>
-            </div>
-            <div class="setting_item">
-                <label for="ss_summaryWords" style="margin-bottom: 5px; display: block;">Word limit: <span id="ss_summaryWords_value">200</span> words</label>
-                <input type="range" id="ss_summaryWords" name="summaryWords" class="ss-setting-input" min="50" max="1000" step="10">
-            </div>
-            <div class="setting_item">
-                <label for="ss_maxSummaries" style="margin-bottom: 5px; display: block;">Max stored summaries</label>
-                <input type="number" id="ss_maxSummaries" name="maxSummaries" class="ss-setting-input text_pole" min="1" max="50" value="5">
-                <small class="setting_item_description">Older entries drop off when this limit is exceeded.</small>
-            </div>
-            <hr>
-        </div>
-
-        <div class="settings_section">
-            <h4>Prompt Injection</h4>
-            <div class="setting_item">
-                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 5px;">
-                    <input type="checkbox" id="ss_injectEnabled" name="injectEnabled" class="ss-setting-input">
-                    <label for="ss_injectEnabled">Inject summary into prompt</label>
+                <div class="setting_item">
+                    <label>Word limit: <span id="ss_summaryWords_value"></span></label>
+                    <input type="range" id="ss_summaryWords" name="summaryWords" class="ss-setting-input" min="50" max="1000" step="10">
                 </div>
-                <small class="setting_item_description">Writes the current summary into the extension prompt stack used at generation time.</small>
-            </div>
-            <div class="setting_item">
-                <label for="ss_injectTemplate" style="margin-bottom: 5px; display: block;">Injection Template</label>
-                <textarea id="ss_injectTemplate" name="injectTemplate" class="ss-setting-input text_pole" rows="2" style="width: 100%; resize: vertical;" placeholder="[Summary: {{summary}}]"></textarea>
-                <small class="setting_item_description">Variables: {{summary}} (current summary), {{last_messages}} (messages since last summary), {{words}} (word limit).</small>
-            </div>
-            <div class="setting_item">
-                <label style="margin-bottom: 5px; display: block;">Injection Position</label>
-                <label class="checkbox_label">
-                    <input type="radio" name="injectPosition" value="-1" class="ss-setting-input">
-                    <span>None (not injected)</span>
-                </label>
-                <label class="checkbox_label">
-                    <input type="radio" name="injectPosition" value="2" class="ss-setting-input">
-                    <span>Before Main Prompt / Story String</span>
-                </label>
-                <label class="checkbox_label">
-                    <input type="radio" name="injectPosition" value="0" class="ss-setting-input">
-                    <span>After Main Prompt / Story String</span>
-                </label>
-                <label class="checkbox_label" style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-                    <input type="radio" name="injectPosition" value="1" class="ss-setting-input">
-                    <span>In-chat @ Depth</span>
-                    <input type="number" id="ss_injectDepth" name="injectDepth" class="ss-setting-input text_pole" min="0" max="10000" value="2" style="width: 80px;">
-                    <span>as</span>
+                <div class="setting_item">
+                    <label>Max Snapshots History</label>
+                    <input type="number" id="ss_maxSummaries" name="maxSummaries" class="ss-setting-input text_pole" min="1" max="50">
+                </div>
+                <hr>
+                <h4>Injection</h4>
+                <div class="setting_item">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <input type="checkbox" id="ss_injectEnabled" name="injectEnabled" class="ss-setting-input">
+                        <label for="ss_injectEnabled">Inject active summary into prompt</label>
+                    </div>
+                </div>
+                <div class="setting_item">
+                    <label>Injection Template</label>
+                    <textarea id="ss_injectTemplate" name="injectTemplate" class="ss-setting-input text_pole" rows="2" placeholder="[Summary: {{summary}}]"></textarea>
+                </div>
+                <div class="setting_item">
+                    <label>Position: </label>
                     <select id="ss_injectRole" name="injectRole" class="ss-setting-input text_pole select_compact">
                         <option value="0">System</option>
                         <option value="1">User</option>
                         <option value="2">Assistant</option>
                     </select>
-                </label>
-            </div>
-            <div class="setting_item">
-                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 5px;">
-                    <input type="checkbox" id="ss_injectScan" name="injectScan" class="ss-setting-input">
-                    <label for="ss_injectScan">Include in scanning</label>
                 </div>
-                <small class="setting_item_description">Whether the injection participates in scanning (mirrors built-in memory behaviour).</small>
             </div>
-            <hr>
         </div>
 
-        <div class="settings_section">
-            <h4>Data Handling</h4>
-            <div class="setting_item">
-                <label for="ss_storeHistory" style="margin-bottom: 5px; display: block;">Store history</label>
-                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 5px;">
-                    <input type="checkbox" id="ss_storeHistory" name="storeHistory" class="ss-setting-input">
-                    <label for="ss_storeHistory">Keep previous summaries (append instead of overwrite)</label>
+        <div id="ss_summary_panel" class="ss-panel">
+            <div class="settings_section">
+                <h4 style="display:flex; justify-content:space-between; align-items:center;">
+                    Snapshots 
+                    <small style="font-weight:normal; opacity:0.7; font-size: 0.8em;">(Newest first)</small>
+                </h4>
+                
+                <div id="ss_snapshots_list" class="ss-snapshots-container"></div>
+                
+                <div id="ss_empty_state" class="ss-empty" style="display:none; text-align:center; padding:20px; color:var(--grey70); border: 1px dashed var(--grey40); border-radius: 5px;">
+                    No snapshots found. Generate a summary to begin.
                 </div>
             </div>
-            <div class="setting_item">
-                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 5px;">
-                    <input type="checkbox" id="ss_limitToUnsummarised" name="limitToUnsummarised" class="ss-setting-input">
-                    <label for="ss_limitToUnsummarised">Limit prompt to unsummarised messages</label>
-                </div>
-                <small class="setting_item_description">When enabled, only messages after the last summary are sent to the main prompt (chat completion only).</small>
-            </div>
-            <div class="setting_item">
-                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 5px;">
-                    <input type="checkbox" id="ss_insertSceneBreak" name="insertSceneBreak" class="ss-setting-input">
-                    <label for="ss_insertSceneBreak">Insert scene break marker after summary</label>
-                </div>
-                <small class="setting_item_description">Adds a visible boundary message in chat to mark where the last summary ended.</small>
-            </div>
-            <div class="setting_item">
-                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 5px;">
-                    <input type="checkbox" id="ss_trimAfterSceneBreak" name="trimAfterSceneBreak" class="ss-setting-input">
-                    <label for="ss_trimAfterSceneBreak">Trim prompt after marker (precise)</label>
-                </div>
-                <small class="setting_item_description">When enabled, prompt is sliced to messages after the marker. Uses marker ID if present; falls back to unsummarised-slice logic.</small>
-            </div>
-            <hr>
-        </div>
-
-        <div class="settings_section">
-            <h4>Debug</h4>
-            <div class="setting_item">
-                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 5px;">
-                    <input type="checkbox" id="ss_debugMode" name="debugMode" class="ss-setting-input">
-                    <label for="ss_debugMode">Enable debug logging</label>
-                </div>
-                <small class="setting_item_description">Logs to console for troubleshooting.</small>
-                <div style="margin-top: 8px; display: flex; gap: 8px;">
-                    <button type="button" id="ss_copyLogs" class="btn btn-secondary" style="font-size: 12px; padding: 4px 8px;">
-                        <i class="fa-solid fa-copy"></i> Copy Logs
-                    </button>
-                    <button type="button" id="ss_clearLogs" class="btn btn-secondary" style="font-size: 12px; padding: 4px 8px;">
-                        <i class="fa-solid fa-trash"></i> Clear Logs
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div id="ss_summary_panel" class="ss-panel" style="display:none;">
-        <div class="settings_section">
-            <h4>Snapshots</h4>
-            <div id="ss_snapshots_list" class="ss-snapshots"></div>
-        </div>
-        <div class="settings_section">
-            <h4>Current Summary</h4>
-            <div class="setting_item">
-                <textarea id="ss_currentSummary" class="text_pole" rows="6" readonly style="width: 100%; resize: vertical;"></textarea>
-                <small class="setting_item_description">Latest summary text (joins recent snapshots if history is enabled).</small>
+            
+            <div class="settings_section" style="margin-top: 15px;">
+                <h4>Current Injection Preview</h4>
+                <textarea id="ss_currentSummary" class="text_pole" rows="3" readonly style="width: 100%; resize: vertical; opacity: 0.7; font-size: 0.9em;"></textarea>
+                <small>This is the actual text currently visible to the AI (based on your history settings).</small>
             </div>
         </div>
     </div>

@@ -277,6 +277,7 @@ function startButtonMount() {
 function bindSettingsUI(container) {
     if (!container) return;
 
+    // 1) Standard inputs
     container.addEventListener('input', (event) => {
         const target = event.target;
         if (!target.classList?.contains('ss-setting-input')) return;
@@ -285,11 +286,8 @@ function bindSettingsUI(container) {
         if (!name) return;
 
         let newValue = value;
-        if (type === 'checkbox') {
-            newValue = !!checked;
-        } else if (type === 'range' || type === 'number' || type === 'radio') {
-            newValue = Number(value);
-        }
+        if (type === 'checkbox') newValue = !!checked;
+        else if (type === 'range' || type === 'number' || type === 'radio') newValue = Number(value);
 
         extension_settings[settingsKey][name] = newValue;
 
@@ -300,36 +298,36 @@ function bindSettingsUI(container) {
 
         saveSettingsDebounced();
 
-        const injectFields = ['injectEnabled', 'injectPosition', 'injectDepth', 'injectScan', 'injectRole', 'injectTemplate'];
-        if (injectFields.includes(name)) {
+        if (['injectEnabled', 'injectPosition', 'injectDepth', 'injectScan', 'injectRole', 'injectTemplate'].includes(name)) {
             applyInjection();
-        }
-
-        if (name === 'limitToUnsummarised') {
-            logDebug('log', 'Updated limitToUnsummarised', newValue);
-        }
-
-        if (name === 'insertSceneBreak' || name === 'trimAfterSceneBreak') {
-            logDebug('log', `Updated ${name}`, newValue);
         }
     });
 
+    // 2) Click delegation
     container.addEventListener('click', async (event) => {
         const actionEl = event.target.closest('[data-ss-action]');
-        if (!actionEl) return;
-        const action = actionEl.dataset.ssAction;
-        const snapshotId = Number(actionEl.dataset.ssId);
-        if (action === 'toggle-settings') {
-            togglePanel(container, '#ss_settings_panel');
+        if (actionEl) {
+            const action = actionEl.dataset.ssAction;
+            if (action === 'toggle-settings') togglePanel(container, '#ss_settings_panel');
+            if (action === 'toggle-summary') togglePanel(container, '#ss_summary_panel');
             return;
         }
-        if (action === 'toggle-summary') {
-            togglePanel(container, '#ss_summary_panel');
+
+        // Accordion header expand/collapse
+        const headerEl = event.target.closest('.ss-snapshot-header');
+        if (headerEl && !event.target.closest('.ss-no-propagate')) {
+            const item = headerEl.closest('.ss-snapshot-item');
+            item?.classList.toggle('expanded');
             return;
         }
-        const chatState = getChatState();
-        if (Number.isFinite(snapshotId)) {
-            await handleSnapshotAction(action, snapshotId, chatState);
+
+        // Snapshot actions
+        const snapBtn = event.target.closest('[data-snap-action]');
+        if (snapBtn) {
+            const action = snapBtn.dataset.snapAction;
+            const id = Number(snapBtn.dataset.snapId);
+            const chatState = getChatState();
+            await handleSnapshotAction(action, id, chatState, container);
             renderSnapshotsList(container, chatState, extension_settings[settingsKey]);
             const currentSummary = container.querySelector('#ss_currentSummary');
             if (currentSummary) currentSummary.value = buildSummaryText(chatState, extension_settings[settingsKey]);
@@ -369,63 +367,102 @@ function togglePanel(container, selector) {
 
 function renderSnapshotsList(container, chatState, settings) {
     const list = container?.querySelector('#ss_snapshots_list');
+    const emptyState = container?.querySelector('#ss_empty_state');
     if (!list) return;
     list.innerHTML = '';
     const snapshots = chatState?.snapshots || [];
+
     if (!snapshots.length) {
-        const empty = document.createElement('div');
-        empty.className = 'ss-empty';
-        empty.textContent = 'No snapshots yet. Click Summarise to create one.';
-        list.appendChild(empty);
+        if (emptyState) emptyState.style.display = 'block';
         return;
+    } else if (emptyState) {
+        emptyState.style.display = 'none';
     }
-    snapshots.slice().forEach((snap) => {
-        const row = document.createElement('div');
-        row.className = 'ss-snapshot-row';
-        row.innerHTML = `
-            <div class="ss-snapshot-meta">
-                <strong>${snap.title || `Scene #${snap.id}`}</strong>
-                <small>${new Date(snap.createdAt || Date.now()).toLocaleString()} · ${snap.fromIndex ?? 0}-${snap.toIndex ?? 0}</small>
+
+    // Newest first
+    [...snapshots].reverse().forEach((snap) => {
+        const dateStr = new Date(snap.createdAt || Date.now()).toLocaleDateString();
+        const wordCount = snap.text ? snap.text.split(/\s+/).filter(Boolean).length : 0;
+        const title = snap.title || `Scene #${snap.id}`;
+
+        const item = document.createElement('div');
+        item.className = 'ss-snapshot-item';
+        item.dataset.id = snap.id;
+
+        item.innerHTML = `
+            <div class="ss-snapshot-header">
+                <div class="ss-snapshot-header-left">
+                    <i class="fa-solid fa-caret-right ss-caret"></i>
+                    <span class="ss-snapshot-title" title="${title}">${title}</span>
+                </div>
+                <div class="ss-snapshot-meta">
+                    ${dateStr} · ${wordCount} words
+                </div>
+                <div class="ss-snapshot-header-actions ss-no-propagate">
+                    <i class="fa-solid fa-trash ss-delete-icon" title="Delete Snapshot" data-snap-action="delete" data-snap-id="${snap.id}"></i>
+                </div>
             </div>
-            <div class="ss-snapshot-actions">
-                <button class="menu_button btn-secondary" data-ss-action="view" data-ss-id="${snap.id}">View</button>
-                <button class="menu_button btn-secondary" data-ss-action="edit" data-ss-id="${snap.id}">Edit</button>
-                <button class="menu_button btn-secondary" data-ss-action="regen" data-ss-id="${snap.id}">Regenerate</button>
-                <button class="menu_button btn-secondary" data-ss-action="copy" data-ss-id="${snap.id}">Copy</button>
-                <button class="menu_button btn-danger" data-ss-action="delete" data-ss-id="${snap.id}">Delete</button>
+            <div class="ss-snapshot-body">
+                <div class="setting_item">
+                    <textarea class="text_pole ss-snap-text" data-id="${snap.id}" rows="6" style="width:100%; font-size:0.9em; font-family:inherit;">${snap.text || ''}</textarea>
+                </div>
+                <div class="ss-action-bar">
+                    <button class="menu_button" data-snap-action="save" data-snap-id="${snap.id}">
+                        <i class="fa-solid fa-save"></i> Save Text
+                    </button>
+                    <button class="menu_button" data-snap-action="regen" data-snap-id="${snap.id}">
+                        <i class="fa-solid fa-arrows-rotate"></i> Regenerate
+                    </button>
+                    <button class="menu_button" data-snap-action="copy" data-snap-id="${snap.id}">
+                        <i class="fa-solid fa-copy"></i> Copy
+                    </button>
+                </div>
             </div>
         `;
-        list.appendChild(row);
+        list.appendChild(item);
     });
 }
 
-async function handleSnapshotAction(action, snapshotId, chatState) {
+async function handleSnapshotAction(action, snapshotId, chatState, container) {
     const settings = extension_settings[settingsKey];
     const snapIndex = chatState.snapshots.findIndex(s => s.id === snapshotId);
     if (snapIndex === -1) return;
     const snap = chatState.snapshots[snapIndex];
-    if (action === 'view') {
-        const currentSummaryEl = document.getElementById('ss_currentSummary');
-        if (currentSummaryEl) currentSummaryEl.value = snap.text || '';
-        logDebug('log', `Viewed snapshot ${snapshotId}`);
-    } else if (action === 'edit') {
-        const updated = window.prompt('Edit snapshot text:', snap.text || '');
-        if (updated !== null) {
-            snap.text = updated;
-            logDebug('log', `Edited snapshot ${snapshotId}`);
+
+    if (action === 'delete') {
+        if (confirm(`Delete "${snap.title || 'this snapshot'}"?`)) {
+            chatState.snapshots.splice(snapIndex, 1);
+            logDebug('log', `Deleted snapshot ${snapshotId}`);
         }
-    } else if (action === 'delete') {
-        chatState.snapshots.splice(snapIndex, 1);
-        logDebug('log', `Deleted snapshot ${snapshotId}`);
+    } else if (action === 'save') {
+        const textarea = container.querySelector(`.ss-snap-text[data-id="${snapshotId}"]`);
+        if (textarea) {
+            snap.text = textarea.value;
+            const btn = container.querySelector(`button[data-snap-action="save"][data-snap-id="${snapshotId}"]`);
+            if (btn) {
+                const original = btn.innerHTML;
+                btn.innerHTML = '<i class="fa-solid fa-check"></i> Saved!';
+                setTimeout(() => btn.innerHTML = original, 1500);
+            }
+            logDebug('log', `Saved snapshot ${snapshotId}`);
+        }
     } else if (action === 'copy') {
         try {
             await navigator.clipboard.writeText(snap.text || '');
-            logDebug('log', `Copied snapshot ${snapshotId}`);
         } catch (err) {
-            console.error(`[${extensionName}] Copy failed`, err);
+            console.error('Copy failed', err);
         }
     } else if (action === 'regen') {
+        const btn = container.querySelector(`button[data-snap-action="regen"][data-snap-id="${snapshotId}"]`);
+        if (btn) {
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Generating...';
+            btn.disabled = true;
+        }
         await regenerateSnapshot(snap, settings, chatState);
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fa-solid fa-arrows-rotate"></i> Regenerate';
+        }
     }
 }
 
