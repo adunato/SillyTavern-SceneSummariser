@@ -16,7 +16,7 @@ Goal: add fine-grained snapshot management so users can view, edit, regenerate, 
 - Add `activeSnapshotId?: number` per chat to pick what gets injected.
 - Keep `chatStatesByIntegrity` so forks (same `chat_metadata.integrity`) reuse snapshots.
 
-## 2) Migration / persistence
+## 2) Migration / persistence - OUT OF SCOPE
 - On load, if legacy `currentSummary` string exists and no `snapshots`, create one snapshot (id=1, title `Scene #1`, text=legacy, `fromIndex=0`, `toIndex=chat.length`) and set `activeSnapshotId` to it.
 - Enforce `maxSummaries` when adding new snapshots (drop oldest non-pinned; see UX).
 
