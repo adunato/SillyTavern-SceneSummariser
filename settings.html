@@ -1,15 +1,20 @@
 <!-- Scene Summariser Settings Panel -->
-<div class="SillyTavern-SceneSummariser-settingslist">
-    <div class="setting_item" style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
-        <label style="display:flex; align-items:center; gap:8px; margin:0;">
-            <input type="checkbox" id="ss_enabled" name="enabled" class="ss-setting-input">
-            <span>Enable Scene Summariser</span>
-        </label>
-        <div class="ss-header-buttons" style="display:flex; gap:8px; flex-wrap:wrap;">
-            <button type="button" class="menu_button" data-ss-action="toggle-settings">Summariser Settings</button>
-            <button type="button" class="menu_button" data-ss-action="toggle-summary">Summary</button>
-        </div>
+<div id="ss_drawer" class="inline-drawer SillyTavern-SceneSummariser-settingslist">
+    <div class="inline-drawer-toggle inline-drawer-header">
+        <b>Scene Summariser</b>
+        <div class="inline-drawer-icon fa-solid fa-circle-chevron-down right"></div>
     </div>
+    <div class="inline-drawer-content">
+        <div class="setting_item" style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+            <label style="display:flex; align-items:center; gap:8px; margin:0;">
+                <input type="checkbox" id="ss_enabled" name="enabled" class="ss-setting-input">
+                <span>Enable Scene Summariser</span>
+            </label>
+            <div class="ss-header-buttons" style="display:flex; gap:8px; flex-wrap:wrap;">
+                <button type="button" class="menu_button" data-ss-action="toggle-settings">Summariser Settings</button>
+                <button type="button" class="menu_button" data-ss-action="toggle-summary">Summary</button>
+            </div>
+        </div>
 
     <div id="ss_settings_panel" class="ss-panel" style="display:none;">
         <div class="settings_section">
