@@ -39,6 +39,7 @@ const chatStateDefaults = {
     lastSummarisedIndex: 0,
     sceneBreakMarkerId: '',
     sceneBreakMesId: null,
+    snapshots: [],
 };
 
 const legacyStateKeys = Object.keys(chatStateDefaults);
@@ -47,6 +48,22 @@ let buttonIntervalId = null;
 let isSummarising = false;
 let debugMessages = [];
 let settingsContainer = null;
+
+function getLatestSnapshot(chatState) {
+    if (!chatState?.snapshots?.length) return null;
+    return chatState.snapshots[chatState.snapshots.length - 1];
+}
+
+function buildSummaryText(chatState, settings) {
+    if (!chatState?.snapshots?.length) return '';
+    if (settings?.storeHistory) {
+        const max = settings.maxSummaries || defaultSettings.maxSummaries;
+        const lastSnapshots = chatState.snapshots.slice(-max);
+        return lastSnapshots.map(s => `${s.title}: ${s.text}`).join('\n');
+    }
+    const latest = getLatestSnapshot(chatState);
+    return latest?.text || '';
+}
 
 function getActiveChatId() {
     const ctx = getContext();
@@ -57,6 +74,25 @@ function getActiveChatId() {
 function getActiveIntegrity() {
     const ctx = getContext();
     return ctx?.chatMetadata?.integrity || null;
+}
+
+function migrateLegacySnapshot(chatState, settings) {
+    // If legacy currentSummary exists and no snapshots yet, create one
+    if (chatState.snapshots && chatState.snapshots.length) return;
+    const legacySummary = settings.currentSummary || '';
+    if (!legacySummary) return;
+    const legacyId = chatState.summaryCounter || 0;
+    const snapshot = {
+        id: legacyId || 1,
+        title: `Scene #${legacyId || 1}`,
+        text: legacySummary,
+        createdAt: Date.now(),
+        fromIndex: 0,
+        toIndex: 0,
+        source: 'legacy',
+    };
+    chatState.snapshots = [snapshot];
+    chatState.summaryCounter = snapshot.id;
 }
 
 function pullLegacyState(settings) {
@@ -87,6 +123,8 @@ function getChatState(chatId = null) {
             ...(integrityState || legacy || {}),
         };
     }
+
+    migrateLegacySnapshot(settings.chatStates[activeChatId], settings);
 
     // Keep a by-integrity cache so forks that carry integrity can re-use state
     if (integrity) {
@@ -276,6 +314,30 @@ function bindSettingsUI(container) {
         }
     });
 
+    container.addEventListener('click', async (event) => {
+        const actionEl = event.target.closest('[data-ss-action]');
+        if (!actionEl) return;
+        const action = actionEl.dataset.ssAction;
+        const snapshotId = Number(actionEl.dataset.ssId);
+        if (action === 'toggle-settings') {
+            togglePanel(container, '#ss_settings_panel');
+            return;
+        }
+        if (action === 'toggle-summary') {
+            togglePanel(container, '#ss_summary_panel');
+            return;
+        }
+        const chatState = getChatState();
+        if (Number.isFinite(snapshotId)) {
+            await handleSnapshotAction(action, snapshotId, chatState);
+            renderSnapshotsList(container, chatState, extension_settings[settingsKey]);
+            const currentSummary = container.querySelector('#ss_currentSummary');
+            if (currentSummary) currentSummary.value = buildSummaryText(chatState, extension_settings[settingsKey]);
+            applyInjection();
+            saveSettingsDebounced();
+        }
+    });
+
     // Debug controls
     container.querySelector('#ss_copyLogs')?.addEventListener('click', async () => {
         const text = debugMessages.join('\n');
@@ -297,6 +359,109 @@ function bindSettingsUI(container) {
         summariseButton.addEventListener('click', onSummariseClick);
     }
 }
+
+function togglePanel(container, selector) {
+    const panel = container.querySelector(selector);
+    if (!panel) return;
+    const isHidden = panel.style.display === 'none';
+    panel.style.display = isHidden ? '' : 'none';
+}
+
+function renderSnapshotsList(container, chatState, settings) {
+    const list = container?.querySelector('#ss_snapshots_list');
+    if (!list) return;
+    list.innerHTML = '';
+    const snapshots = chatState?.snapshots || [];
+    if (!snapshots.length) {
+        const empty = document.createElement('div');
+        empty.className = 'ss-empty';
+        empty.textContent = 'No snapshots yet. Click Summarise to create one.';
+        list.appendChild(empty);
+        return;
+    }
+    snapshots.slice().forEach((snap) => {
+        const row = document.createElement('div');
+        row.className = 'ss-snapshot-row';
+        row.innerHTML = `
+            <div class="ss-snapshot-meta">
+                <strong>${snap.title || `Scene #${snap.id}`}</strong>
+                <small>${new Date(snap.createdAt || Date.now()).toLocaleString()} · ${snap.fromIndex ?? 0}-${snap.toIndex ?? 0}</small>
+            </div>
+            <div class="ss-snapshot-actions">
+                <button class="menu_button btn-secondary" data-ss-action="view" data-ss-id="${snap.id}">View</button>
+                <button class="menu_button btn-secondary" data-ss-action="edit" data-ss-id="${snap.id}">Edit</button>
+                <button class="menu_button btn-secondary" data-ss-action="regen" data-ss-id="${snap.id}">Regenerate</button>
+                <button class="menu_button btn-secondary" data-ss-action="copy" data-ss-id="${snap.id}">Copy</button>
+                <button class="menu_button btn-danger" data-ss-action="delete" data-ss-id="${snap.id}">Delete</button>
+            </div>
+        `;
+        list.appendChild(row);
+    });
+}
+
+async function handleSnapshotAction(action, snapshotId, chatState) {
+    const settings = extension_settings[settingsKey];
+    const snapIndex = chatState.snapshots.findIndex(s => s.id === snapshotId);
+    if (snapIndex === -1) return;
+    const snap = chatState.snapshots[snapIndex];
+    if (action === 'view') {
+        const currentSummaryEl = document.getElementById('ss_currentSummary');
+        if (currentSummaryEl) currentSummaryEl.value = snap.text || '';
+        logDebug('log', `Viewed snapshot ${snapshotId}`);
+    } else if (action === 'edit') {
+        const updated = window.prompt('Edit snapshot text:', snap.text || '');
+        if (updated !== null) {
+            snap.text = updated;
+            logDebug('log', `Edited snapshot ${snapshotId}`);
+        }
+    } else if (action === 'delete') {
+        chatState.snapshots.splice(snapIndex, 1);
+        logDebug('log', `Deleted snapshot ${snapshotId}`);
+    } else if (action === 'copy') {
+        try {
+            await navigator.clipboard.writeText(snap.text || '');
+            logDebug('log', `Copied snapshot ${snapshotId}`);
+        } catch (err) {
+            console.error(`[${extensionName}] Copy failed`, err);
+        }
+    } else if (action === 'regen') {
+        await regenerateSnapshot(snap, settings, chatState);
+    }
+}
+
+async function regenerateSnapshot(snapshot, settings, chatState) {
+    const ctx = getContext();
+    const chat = ctx?.chat || [];
+    const start = Math.max(0, snapshot.fromIndex || 0);
+    const end = Math.min(chat.length, snapshot.toIndex || chat.length);
+    const slice = chat.slice(start, end);
+    const name1 = ctx?.name1 || 'User';
+    const name2 = ctx?.name2 || 'Character';
+    const transcript = slice
+        .map((m) => {
+            const speaker = m.name || (m.is_user ? name1 : name2);
+            return `${speaker}: ${m.mes || ''}`.trim();
+        })
+        .join('\n');
+
+    const words = settings.summaryWords || defaultSettings.summaryWords;
+    const promptTemplate = settings.summaryPrompt || defaultSettings.summaryPrompt;
+    const prompt = promptTemplate
+        .replace('{{words}}', words)
+        .replace('{{summary}}', snapshot.text || '')
+        .replace('{{last_messages}}', transcript || '(no messages)');
+
+    try {
+        const result = await generateRaw({ prompt });
+        snapshot.text = (result || '').trim();
+        snapshot.createdAt = Date.now();
+        logDebug('log', `Regenerated snapshot ${snapshot.id}`);
+    } catch (err) {
+        console.error(`[${extensionName}] Failed to regenerate snapshot`, err);
+        logDebug('error', 'Regenerate failed', err?.message || err);
+    }
+}
+
 
 function updateSettingsUI(container) {
     if (!container) return;
@@ -339,7 +504,9 @@ function updateSettingsUI(container) {
     if (wordsDisplay) wordsDisplay.textContent = settings.summaryWords ?? defaultSettings.summaryWords;
 
     const currentSummary = container.querySelector('#ss_currentSummary');
-    if (currentSummary) currentSummary.value = chatState.currentSummary || '';
+    if (currentSummary) currentSummary.value = buildSummaryText(chatState, settings);
+
+    renderSnapshotsList(container, chatState, settings);
 
     applyInjection();
     logDebug('log', 'Settings UI updated');
@@ -363,16 +530,16 @@ async function onSummariseClick() {
     logDebug('log', 'Summarise clicked');
 
     const settings = extension_settings[settingsKey];
+    const chatState = getChatState();
     const words = settings.summaryWords || defaultSettings.summaryWords;
     const promptTemplate = settings.summaryPrompt || defaultSettings.summaryPrompt;
     const promptText = promptTemplate
         .replace('{{words}}', words)
-        .replace('{{summary}}', getChatState().currentSummary || '');
+        .replace('{{summary}}', buildSummaryText(chatState, settings));
 
     // Build chat transcript for context
     const ctx = getContext();
     const chat = ctx?.chat || [];
-    const chatState = getChatState();
     const lastIdx = Math.min(chatState.lastSummarisedIndex || 0, chat.length);
     const newMessages = chat.slice(lastIdx);
 
@@ -407,33 +574,30 @@ async function onSummariseClick() {
         const cleaned = (result || '').trim();
         logDebug('log', 'LLM summary result', cleaned);
 
-        // Update stored summary list
+        // Update stored snapshot list
         const nextId = (chatState.summaryCounter ?? 0) + 1;
-        const entry = `Scene #${nextId}: ${cleaned}`;
-
-        const keepHistory = settings.storeHistory !== false;
-        let finalSummary = entry;
-
-        if (keepHistory) {
-            const existingLines = (chatState.currentSummary || '').trim();
-            const combined = existingLines ? `${existingLines}\n${entry}` : entry;
-
-            // Enforce max summaries if configured
-            const lines = combined.split('\n');
-            const max = settings.maxSummaries || defaultSettings.maxSummaries;
-            const trimmedLines = lines.slice(-max);
-            finalSummary = trimmedLines.join('\n');
-        }
+        const snapshot = {
+            id: nextId,
+            title: `Scene #${nextId}`,
+            text: cleaned,
+            createdAt: Date.now(),
+            fromIndex: lastIdx,
+            toIndex: chat.length,
+            source: 'manual',
+            words,
+        };
 
         chatState.summaryCounter = nextId;
-        // Use the trimmed/combined history so we keep appending while enforcing max history
-        chatState.currentSummary = keepHistory ? finalSummary : entry;
+        chatState.snapshots = chatState.snapshots || [];
+        chatState.snapshots.push(snapshot);
+        const max = settings.maxSummaries || defaultSettings.maxSummaries;
+        if (chatState.snapshots.length > max) {
+            chatState.snapshots = chatState.snapshots.slice(-max);
+        }
         chatState.lastSummarisedIndex = chat.length;
 
         const currentSummaryEl = document.getElementById('ss_currentSummary');
-        if (currentSummaryEl) {
-            currentSummaryEl.value = finalSummary;
-        }
+        if (currentSummaryEl) currentSummaryEl.value = buildSummaryText(chatState, settings);
 
         if (settings.insertSceneBreak) {
             await insertSceneBreakMarker();
@@ -491,7 +655,7 @@ function applyInjection() {
 
     const template = settings.injectTemplate || defaultSettings.injectTemplate;
     const value = template
-        .replace('{{summary}}', chatState.currentSummary || '')
+        .replace('{{summary}}', buildSummaryText(chatState, settings))
         .replace('{{last_messages}}', transcript)
         .replace('{{words}}', settings.summaryWords ?? defaultSettings.summaryWords);
 
