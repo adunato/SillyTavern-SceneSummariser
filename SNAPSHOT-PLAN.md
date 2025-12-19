@@ -21,7 +21,11 @@ Goal: add fine-grained snapshot management so users can view, edit, regenerate, 
 - Enforce `maxSummaries` when adding new snapshots (drop oldest non-pinned; see UX).
 
 ## 3) UI additions (settings.html)
-- New “Snapshots” section below Debug:
+- Top-level compact header (follow memory extension pattern):
+  1) Checkbox: “Enable Scene Summariser” (always visible).
+  2) Button: “Summariser Settings” — toggles expansion of main settings panel (prompt/injection/data-handling/etc.), matching the memory extension’s drawer behaviour.
+  3) Button: “Summary” — toggles expansion of the “Current Summary / Snapshots” panel. Defaults collapsed; expands to show snapshots list and current summary text.
+- “Snapshots” section (inside the Summary drawer):
   - List/table of snapshots: Title (editable inline), Created (relative), Range (`fromIndex–toIndex`), Words, Source.
   - Row actions: View, Edit, Regenerate, Delete, Pin/Inject.
   - Global controls: “New snapshot” (runs summarise), “Use latest” toggle (clears active to latest), “Copy text”.
