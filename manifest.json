@@ -1,7 +1,8 @@
 {
     "name": "SillyTavern-SceneSummariser",
     "display_name": "Scene Summariser",
-    "loading_order": 120,
+    "loading_order": 1,
+    "generate_interceptor": "SceneSummariser_filterContextInterceptor",
     "requires": [],
     "optional": [],
     "js": "index.js",

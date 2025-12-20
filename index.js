@@ -814,11 +814,11 @@ jQuery(async () => {
     await mountSettings();
     startButtonMount();
     try {
-        logDebug('log', `eventSource available: ${!!eventSource}`);
-        eventSource?.on(event_types.CHAT_COMPLETION_PROMPT_READY, filterChatCompletionPrompt);
-        eventSource?.on(event_types.GENERATE_BEFORE_COMBINE_PROMPTS, filterTextCompletionPrompt);
+        // logDebug('log', `eventSource available: ${!!eventSource}`);
+        // eventSource?.on(event_types.CHAT_COMPLETION_PROMPT_READY, filterChatCompletionPrompt);
+        // eventSource?.on(event_types.GENERATE_BEFORE_COMBINE_PROMPTS, filterTextCompletionPrompt);
         eventSource?.on(event_types.CHAT_CHANGED, onChatChanged);
-        logDebug('log', 'Registered prompt filter listeners');
+        logDebug('log', 'Registered prompt filter listeners (migrated to generate_interceptor)');
     } catch (err) {
         console.error(`[${extensionName}] Failed to register prompt filter:`, err);
     }
@@ -829,69 +829,55 @@ function onChatChanged() {
     updateSettingsUI(settingsContainer);
     applyInjection();
 }
-function replacePromptMessages(eventData, newMessages) {
-    // Mutate in-place so upstream references (chatCompletion) see the change
-    eventData.chat.splice(0, eventData.chat.length, ...newMessages);
-}
 
-function filterChatCompletionPrompt(eventData) {
+/**
+ * Context interceptor for filtering messages
+ * @param {object[]} chat The chat array to filter
+ * @param {number} maxContext The maximum context size (unused here but passed by ST)
+ * @param {function} abort Function to abort generation
+ * @param {string} type Generation type ('chat', 'text', 'quiet', etc)
+ */
+async function filterContextInterceptor(chat, maxContext, abort, type) {
+    if (type === 'quiet') return; // Don't interfere with internal quiet prompts
+
     ensureSettings();
     const settings = extension_settings[settingsKey];
-    logDebug('log', `filterChatCompletionPrompt called. limitToUnsummarised=${settings?.limitToUnsummarised}`);
+    logDebug('log', `filterContextInterceptor called. limitToUnsummarised=${settings?.limitToUnsummarised}`);
+
     if (!settings?.limitToUnsummarised) return;
-    if (!Array.isArray(eventData?.chat)) {
-        logDebug('warn', 'eventData.chat is not an array');
-        return;
-    }
 
     let markerIndex = -1;
-    const latestSnapshot = getLatestSnapshot(chatState);
+    // Scan BACKWARDS for the marker
+    for (let i = chat.length - 1; i >= 0; i--) {
+        const m = chat[i];
 
-    // 1. Precise check: Find the marker linked to the latest snapshot
-    // We scan BACKWARDS to find the most recent marker.
-    // We check for:
-    // A) Explicit snapshot_id in extra metadata (Created by this version)
-    // B) The unique CSS class or text content of the marker (Robust fallback for legacy/imported chats)
-
-    // We do NOT require latestSnapshot to be present in memory; we trust the chat log content.
-    for (let i = eventData.chat.length - 1; i >= 0; i--) {
-        const m = eventData.chat[i];
-
-        const isStrictMatch = latestSnapshot?.id && m?.extra?.scene_summariser_marker && m.extra.snapshot_id === latestSnapshot.id;
-        const isContentMatch = typeof m?.mes === 'string' && (m.mes.includes('scene-summary-break') || m.mes.includes('Scene Summary Boundary'));
-
-        if (isStrictMatch || isContentMatch) {
+        // 1. Check Metadata (Robust)
+        const isMetadataMarker = m?.extra?.scene_summariser_marker;
+        if (isMetadataMarker) {
             markerIndex = i;
-            logDebug('log', `Found context cutoff marker at index ${i} (Strict: ${isStrictMatch}, Content: ${isContentMatch})`);
-            break; // Stop at the first (latest) marker found from the end
+            logDebug('log', `Found context cutoff marker (Metadata) at index ${i}`);
+            break;
+        }
+
+        // 2. Check Content (Fallback)
+        const content = m?.mes || '';
+        if (content.includes('scene-summary-break') || content.includes('Scene Summary Boundary')) {
+            markerIndex = i;
+            logDebug('log', `Found context cutoff marker (Content) at index ${i}`);
+            break;
         }
     }
 
-    // 2. Legacy check: Fallback to stored marker ID if precise check failed
-    // STRICT MODE: We still check for the marker object, but we DO NOT fall back to index math.
-    if (markerIndex === -1 && chatState.sceneBreakMarkerId) {
-        markerIndex = eventData.chat.findIndex(m =>
-            m?.mesid === chatState.sceneBreakMesId ||
-            m?.extra?.marker_id === chatState.sceneBreakMarkerId ||
-            (typeof m?.mes === 'string' && m.mes.includes(chatState.sceneBreakMarkerId))
-        );
-        if (markerIndex !== -1) {
-            logDebug('log', `Found legacy marker at index ${markerIndex}`);
-        }
-    }
-
-    if (markerIndex !== -1 && markerIndex < eventData.chat.length - 1) {
-        const trimmed = eventData.chat.slice(markerIndex + 1);
-        replacePromptMessages(eventData, trimmed);
-        logDebug('log', `Trimmed prompt after marker to ${trimmed.length} messages`);
-        return;
-    } else if (markerIndex !== -1) {
-        // Marker found but it is the last message (empty new context)
-        replacePromptMessages(eventData, []);
-        logDebug('log', 'Marker is the last message; cleared prompt');
-        return;
+    if (markerIndex !== -1) {
+        logDebug('log', `Filtering request. Found marker at ${markerIndex}. Keeping messages AFTER this index.`);
+        // Mutate the chat array directly - splice out everything from 0 up to (and including) markerIndex
+        // We want to KEEP messages starting from markerIndex + 1
+        // So we remove (markerIndex + 1) items from the start.
+        chat.splice(0, markerIndex + 1);
     } else {
-        logDebug('warn', 'Marker not found in prompt; NOT trimming (fallback disabled).');
-        // Do nothing - send full context
+        logDebug('log', 'Limit enabled but no marker found. Sending full context.');
     }
 }
+
+// Expose the interceptor globally matching the name in manifest.json
+window['SceneSummariser_filterContextInterceptor'] = filterContextInterceptor;
