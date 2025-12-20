@@ -48,108 +48,88 @@
     pointer-events: none;
 }
 
-/* Lorebook-style Accordion CSS for Scene Summariser */
+/* Native-like Accordion Logic for Scene Summariser */
+/* Native-like Accordion Logic for Scene Summariser */
 .ss-snapshot-item {
-    background-color: var(--grey30);
-    border: 1px solid var(--grey40);
     margin-bottom: 5px;
-    border-radius: 5px;
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 10px;
     overflow: hidden;
 }
 
 .ss-snapshot-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 8px 10px;
-    background-color: var(--grey20);
-    /* Match World Info/Lorebook header */
-    cursor: pointer;
-    user-select: none;
-    transition: background-color 0.2s;
-}
-
-.ss-snapshot-header:hover {
-    background-color: var(--grey40);
-}
-
-.ss-snapshot-header-left {
-    display: flex;
-    align-items: center;
+    display: flex !important;
+    align-items: center !important;
+    flex-direction: row !important;
+    width: 100%;
+    padding: 5px !important;
     gap: 10px;
-    flex-grow: 1;
+    cursor: pointer;
+    background-color: var(--SmartThemeShadowColor);
+    min-height: 40px;
+    /* Ensure consistent height */
+    box-sizing: border-box;
+    /* Include padding in height */
+}
+
+.ss-snapshot-header-content {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    justify-content: space-between;
     overflow: hidden;
-}
-
-.ss-caret {
-    transition: transform 0.2s;
-    color: var(--grey70);
-}
-
-.ss-snapshot-item.expanded .ss-caret {
-    transform: rotate(90deg);
+    flex-wrap: nowrap !important;
+    /* Prevent wrapping */
 }
 
 .ss-snapshot-title {
     font-weight: bold;
-    white-space: nowrap;
     overflow: hidden;
+    white-space: nowrap;
     text-overflow: ellipsis;
+    margin-right: 10px;
+    flex: 1;
+    /* Take available space */
+    min-width: 0;
+    /* Allow shrinking below content size for ellipsis */
 }
 
-.ss-snapshot-meta {
-    font-size: 0.85em;
-    color: var(--grey70);
-    margin-left: auto;
-    margin-right: 15px;
-    /* More space from actions */
-}
-
-.ss-snapshot-header-actions {
+.ss-header-actions {
     display: flex;
-    gap: 10px;
-    /* Space between icons */
     align-items: center;
+    gap: 5px;
+    flex-shrink: 0;
+    /* Never shrink buttons */
+    flex-wrap: nowrap !important;
+}
+
+/* Visibility Logic */
+.ss-snapshot-content {
+    display: none;
+    padding: 10px;
+    border-top: 1px solid var(--SmartThemeBorderColor);
+}
+
+.ss-snapshot-item.expanded .ss-snapshot-content {
+    display: block;
+}
+
+.ss-snapshot-item.expanded .inline-drawer-icon {
+    transform: rotate(180deg);
 }
 
 .ss-action-icon {
     opacity: 0.7;
-    transition: opacity 0.2s, color 0.2s;
+    transition: opacity 0.2s;
     cursor: pointer;
     font-size: 1.1em;
+    padding: 2px;
 }
 
 .ss-action-icon:hover {
     opacity: 1;
-    color: var(--SmartThemeUi, #fff);
 }
 
-.ss-delete-icon {
+.ss-delete-icon:hover {
     color: var(--smart-theme-red);
-}
-
-.ss-snapshot-body {
-    display: none;
-    padding: 10px;
-    background-color: var(--grey10);
-    border-top: 1px solid var(--grey40);
-}
-
-.ss-snapshot-item.expanded .ss-snapshot-body {
-    display: block;
-}
-
-.ss-action-bar {
-    display: flex;
-    gap: 5px;
-    margin-top: 10px;
-    flex-wrap: wrap;
-}
-
-.ss-header-buttons {
-    margin-left: auto;
-}
-
-.ss-snapshots-container {
-    margin-top: 8px;
 }

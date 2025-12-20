@@ -390,28 +390,27 @@ function renderSnapshotsList(container, chatState, settings) {
         item.dataset.id = snap.id;
 
         item.innerHTML = `
-            <div class="ss-snapshot-header">
-                <div class="ss-snapshot-header-left">
-                    <i class="fa-solid fa-caret-right ss-caret"></i>
-                    <span class="ss-snapshot-title" title="${title}">${title}</span>
+            <div class="inline-drawer wide100p">
+                <div class="inline-drawer-header ss-snapshot-header">
+                    <div class="inline-drawer-toggle inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
+                    <div class="ss-snapshot-header-content">
+                         <div class="ss-snapshot-title text_pole textarea_compact" title="${title}">${title}</div>
+                         <div class="flex-container ss-no-propagate gap5px">
+                               <i class="menu_button fa-solid fa-arrows-rotate ss-action-icon" title="Regenerate" data-snap-action="regen" data-snap-id="${snap.id}"></i>
+                               <i class="menu_button fa-solid fa-copy ss-action-icon" title="Copy Text" data-snap-action="copy" data-snap-id="${snap.id}"></i>
+                               <i class="menu_button fa-solid fa-trash-can ss-delete-icon ss-action-icon" title="Delete Snapshot" data-snap-action="delete" data-snap-id="${snap.id}"></i>
+                         </div>
+                    </div>
                 </div>
-                <div class="ss-snapshot-meta">
-                    ${dateStr} · ${wordCount} words
-                </div>
-                <div class="ss-snapshot-header-actions ss-no-propagate">
-                    <i class="fa-solid fa-arrows-rotate ss-action-icon" title="Regenerate" data-snap-action="regen" data-snap-id="${snap.id}"></i>
-                    <i class="fa-solid fa-copy ss-action-icon" title="Copy Text" data-snap-action="copy" data-snap-id="${snap.id}"></i>
-                    <i class="fa-solid fa-trash ss-delete-icon ss-action-icon" title="Delete Snapshot" data-snap-action="delete" data-snap-id="${snap.id}"></i>
-                </div>
-            </div>
-            <div class="ss-snapshot-body">
-                <div class="setting_item">
-                    <textarea class="text_pole ss-snap-text" data-id="${snap.id}" rows="6" style="width:100%; font-size:0.9em; font-family:inherit;">${snap.text || ''}</textarea>
-                </div>
-                <div class="ss-action-bar">
-                    <button class="menu_button" data-snap-action="save" data-snap-id="${snap.id}">
-                        <i class="fa-solid fa-save"></i> Save Text
-                    </button>
+                <div class="inline-drawer-content ss-snapshot-content">
+                    <div class="setting_item">
+                        <textarea class="text_pole ss-snap-text" data-id="${snap.id}" rows="6" style="width:100%; font-size:0.9em; font-family:inherit;">${snap.text || ''}</textarea>
+                    </div>
+                    <div class="ss-action-bar" style="margin-top:5px;">
+                        <button class="menu_button" data-snap-action="save" data-snap-id="${snap.id}">
+                            <i class="fa-solid fa-save"></i> Save Text
+                        </button>
+                    </div>
                 </div>
             </div>
         `;
