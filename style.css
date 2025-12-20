@@ -133,3 +133,16 @@
 .ss-delete-icon:hover {
     color: var(--smart-theme-red);
 }
+
+.ss-sub-label {
+    font-weight: bold;
+    margin-bottom: 5px;
+    display: block;
+}
+
+.ss-radio-group {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    margin-left: 5px;
+}

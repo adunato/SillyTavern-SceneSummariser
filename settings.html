@@ -1,56 +1,94 @@
-
 <div id="ss_drawer" class="inline-drawer SillyTavern-SceneSummariser-settingslist">
     <div class="inline-drawer-toggle inline-drawer-header">
         <b>Scene Summariser</b>
         <div class="inline-drawer-icon fa-solid fa-circle-chevron-down right"></div>
     </div>
-    
+
     <div class="inline-drawer-content">
-        <div class="setting_item" style="display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom: 10px;">
+        <div class="setting_item"
+            style="display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom: 10px;">
             <label style="display:flex; align-items:center; gap:8px; margin:0;">
                 <input type="checkbox" id="ss_enabled" name="enabled" class="ss-setting-input">
                 <span>Enable</span>
             </label>
             <div class="ss-header-buttons" style="display:flex; gap:5px; flex-wrap:wrap;">
-                <button type="button" class="menu_button" data-ss-action="toggle-settings"><i class="fa-solid fa-gear"></i> Settings</button>
-                <button type="button" class="menu_button" data-ss-action="toggle-summary"><i class="fa-solid fa-list"></i> Snapshots</button>
+                <button type="button" class="menu_button" data-ss-action="toggle-settings"><i
+                        class="fa-solid fa-gear"></i> Settings</button>
+                <button type="button" class="menu_button" data-ss-action="toggle-summary"><i
+                        class="fa-solid fa-list"></i> Snapshots</button>
             </div>
         </div>
 
-        <div id="ss_settings_panel" class="ss-panel" style="display:none; padding: 10px; background: var(--grey10); border-radius: 5px; margin-bottom: 10px;">
+        <div id="ss_settings_panel" class="ss-panel"
+            style="display:none; padding: 10px; background: var(--grey10); border-radius: 5px; margin-bottom: 10px;">
             <div class="settings_section">
                 <h4>General &amp; Generation</h4>
                 <div class="setting_item">
                     <label>Summary Prompt</label>
-                    <textarea id="ss_summaryPrompt" name="summaryPrompt" class="ss-setting-input text_pole" rows="3" placeholder="Prompt used to generate summaries..."></textarea>
+                    <textarea id="ss_summaryPrompt" name="summaryPrompt" class="ss-setting-input text_pole" rows="3"
+                        placeholder="Prompt used to generate summaries..."></textarea>
                 </div>
                 <div class="setting_item">
                     <label>Word limit: <span id="ss_summaryWords_value"></span></label>
-                    <input type="range" id="ss_summaryWords" name="summaryWords" class="ss-setting-input" min="50" max="1000" step="10">
+                    <input type="range" id="ss_summaryWords" name="summaryWords" class="ss-setting-input" min="50"
+                        max="1000" step="10">
                 </div>
                 <div class="setting_item">
                     <label>Max Snapshots History</label>
-                    <input type="number" id="ss_maxSummaries" name="maxSummaries" class="ss-setting-input text_pole" min="1" max="50">
+                    <input type="number" id="ss_maxSummaries" name="maxSummaries" class="ss-setting-input text_pole"
+                        min="1" max="50">
                 </div>
                 <hr>
                 <h4>Injection</h4>
                 <div class="setting_item">
-                    <div style="display: flex; align-items: center; gap: 8px;">
-                        <input type="checkbox" id="ss_injectEnabled" name="injectEnabled" class="ss-setting-input">
-                        <label for="ss_injectEnabled">Inject active summary into prompt</label>
-                    </div>
-                </div>
-                <div class="setting_item">
                     <label>Injection Template</label>
-                    <textarea id="ss_injectTemplate" name="injectTemplate" class="ss-setting-input text_pole" rows="2" placeholder="[Summary: {{summary}}]"></textarea>
+                    <textarea id="ss_injectTemplate" name="injectTemplate" class="ss-setting-input text_pole" rows="1"
+                        placeholder="[Summary: {{summary}}]"></textarea>
                 </div>
+
                 <div class="setting_item">
-                    <label>Position: </label>
-                    <select id="ss_injectRole" name="injectRole" class="ss-setting-input text_pole select_compact">
-                        <option value="0">System</option>
-                        <option value="1">User</option>
-                        <option value="2">Assistant</option>
-                    </select>
+                    <div class="ss-sub-label">Injection Position</div>
+
+                    <label class="checkbox_label"
+                        title="If enabled, the summary text will be scanned for World Info keys">
+                        <input id="ss_injectScan" name="injectScan" type="checkbox" class="ss-setting-input">
+                        Include in World Info Scanning
+                    </label>
+
+                    <div class="ss-radio-group">
+                        <label class="radio_label" title="Do not automatically inject the summary">
+                            <input type="radio" name="injectPosition" value="-1" class="ss-setting-input">
+                            None (not injected) <i class="fa-solid fa-circle-info"
+                                title="The summary will only be available via the /summarise-check slash command or macro"></i>
+                        </label>
+
+                        <label class="radio_label" title="Inject before the main prompt / story string">
+                            <input type="radio" name="injectPosition" value="2" class="ss-setting-input">
+                            Before Main Prompt / Story String
+                        </label>
+
+                        <label class="radio_label" title="Inject after the main prompt / story string">
+                            <input type="radio" name="injectPosition" value="0" class="ss-setting-input">
+                            After Main Prompt / Story String
+                        </label>
+
+                        <div style="display:flex; align-items:center; flex-wrap:wrap; gap:5px;">
+                            <label class="radio_label" title="Inject into chat history at a specific depth"
+                                style="margin-bottom:0;">
+                                <input type="radio" name="injectPosition" value="1" class="ss-setting-input">
+                                In-chat @ Depth
+                            </label>
+                            <input id="ss_injectDepth" name="injectDepth" type="number"
+                                class="ss-setting-input text_pole" min="0" style="width: 60px; padding: 2px 5px;">
+                            <span>as</span>
+                            <select id="ss_injectRole" name="injectRole"
+                                class="ss-setting-input text_pole select_compact" style="width: auto;">
+                                <option value="0">System</option>
+                                <option value="1">User</option>
+                                <option value="2">Assistant</option>
+                            </select>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -58,20 +96,22 @@
         <div id="ss_summary_panel" class="ss-panel">
             <div class="settings_section">
                 <h4 style="display:flex; justify-content:space-between; align-items:center;">
-                    Snapshots 
-                    
+                    Snapshots
+
                 </h4>
-                
+
                 <div id="ss_snapshots_list" class="ss-snapshots-container"></div>
-                
-                <div id="ss_empty_state" class="ss-empty" style="display:none; text-align:center; padding:20px; color:var(--grey70); border: 1px dashed var(--grey40); border-radius: 5px;">
+
+                <div id="ss_empty_state" class="ss-empty"
+                    style="display:none; text-align:center; padding:20px; color:var(--grey70); border: 1px dashed var(--grey40); border-radius: 5px;">
                     No snapshots found. Generate a summary to begin.
                 </div>
             </div>
-            
+
             <div class="settings_section" style="margin-top: 15px;">
                 <h4>Current Injection Preview</h4>
-                <textarea id="ss_currentSummary" class="text_pole" rows="3" readonly style="width: 100%; resize: vertical; opacity: 0.7; font-size: 0.9em;"></textarea>
+                <textarea id="ss_currentSummary" class="text_pole" rows="3" readonly
+                    style="width: 100%; resize: vertical; opacity: 0.7; font-size: 0.9em;"></textarea>
                 <small>This is the actual text currently visible to the AI (based on your history settings).</small>
             </div>
         </div>

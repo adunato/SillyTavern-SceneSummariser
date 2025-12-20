@@ -298,6 +298,10 @@ function bindSettingsUI(container) {
 
         saveSettingsDebounced();
 
+        if (name === 'injectPosition') {
+            updateInjectionVisibility(container);
+        }
+
         if (['injectEnabled', 'injectPosition', 'injectDepth', 'injectScan', 'injectRole', 'injectTemplate'].includes(name)) {
             applyInjection();
         }
@@ -476,6 +480,7 @@ async function regenerateSnapshot(snapshot, settings, chatState) {
     const name1 = ctx?.name1 || 'User';
     const name2 = ctx?.name2 || 'Character';
     const transcript = slice
+        .filter(m => !m.extra?.scene_summariser_marker)
         .map((m) => {
             const speaker = m.name || (m.is_user ? name1 : name2);
             return `${speaker}: ${m.mes || ''}`.trim();
@@ -538,6 +543,8 @@ function updateSettingsUI(container) {
     const radios = container.querySelectorAll('input[name="injectPosition"]');
     radios.forEach(r => r.checked = String(r.value) === String(settings.injectPosition));
 
+    updateInjectionVisibility(container);
+
     const wordsDisplay = container.querySelector('#ss_summaryWords_value');
     if (wordsDisplay) wordsDisplay.textContent = settings.summaryWords ?? defaultSettings.summaryWords;
 
@@ -548,6 +555,24 @@ function updateSettingsUI(container) {
 
     applyInjection();
     logDebug('log', 'Settings UI updated');
+}
+
+function updateInjectionVisibility(container) {
+    if (!container) return;
+    const settings = extension_settings[settingsKey];
+    const isInChat = String(settings.injectPosition) === '1'; // IN_CHAT
+
+    const depthInput = container.querySelector('#ss_injectDepth');
+    const roleSelect = container.querySelector('#ss_injectRole');
+
+    if (depthInput) {
+        depthInput.disabled = !isInChat;
+        depthInput.style.opacity = isInChat ? '1' : '0.5';
+    }
+    if (roleSelect) {
+        roleSelect.disabled = !isInChat;
+        roleSelect.style.opacity = isInChat ? '1' : '0.5';
+    }
 }
 
 async function onSummariseClick() {
@@ -574,7 +599,9 @@ async function onSummariseClick() {
 
     // Pass ALL summaries to the generation prompt so the AI has full context,
     // regardless of the injection limit (maxSummaries).
-    const allSummaries = (chatState.snapshots || []).map(s => `${s.title}: ${s.text}`).join('\n');
+    const allSummaries = (chatState.snapshots || [])
+        .map(s => `${s.title || 'Scene #' + s.id}: ${s.text}`)
+        .join('\n');
 
     const promptText = promptTemplate
         .replace('{{words}}', words)
@@ -601,6 +628,7 @@ async function onSummariseClick() {
     const name2 = ctx?.name2 || 'Character';
 
     const transcript = newMessages
+        .filter(m => !m.extra?.scene_summariser_marker)
         .slice(-50) // limit to most recent chunk to keep prompt small
         .map((m) => {
             const speaker = m.name || (m.is_user ? name1 : name2);
