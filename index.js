@@ -571,9 +571,14 @@ async function onSummariseClick() {
     const chatState = getChatState();
     const words = settings.summaryWords || defaultSettings.summaryWords;
     const promptTemplate = settings.summaryPrompt || defaultSettings.summaryPrompt;
+
+    // Pass ALL summaries to the generation prompt so the AI has full context,
+    // regardless of the injection limit (maxSummaries).
+    const allSummaries = (chatState.snapshots || []).map(s => `${s.title}: ${s.text}`).join('\n');
+
     const promptText = promptTemplate
         .replace('{{words}}', words)
-        .replace('{{summary}}', buildSummaryText(chatState, settings));
+        .replace('{{summary}}', allSummaries);
 
     // Build chat transcript for context
     const ctx = getContext();
@@ -628,10 +633,8 @@ async function onSummariseClick() {
         chatState.summaryCounter = nextId;
         chatState.snapshots = chatState.snapshots || [];
         chatState.snapshots.push(snapshot);
-        const max = settings.maxSummaries || defaultSettings.maxSummaries;
-        if (chatState.snapshots.length > max) {
-            chatState.snapshots = chatState.snapshots.slice(-max);
-        }
+        // Do not truncate snapshots here; we want to keep all history for the next summarisation.
+        // maxSummaries will be applied during injection via buildSummaryText.
         chatState.lastSummarisedIndex = chat.length;
 
         if (settings.insertSceneBreak) {
