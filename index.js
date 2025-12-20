@@ -30,7 +30,6 @@ const defaultSettings = {
     injectTemplate: '[Summary: {{summary}}]',
     limitToUnsummarised: false,
     insertSceneBreak: true,
-    trimAfterSceneBreak: true,
 };
 
 const chatStateDefaults = {
@@ -541,7 +540,6 @@ function updateSettingsUI(container) {
     setValue('#ss_injectTemplate', settings.injectTemplate ?? defaultSettings.injectTemplate);
     setValue('#ss_limitToUnsummarised', settings.limitToUnsummarised ?? defaultSettings.limitToUnsummarised);
     setValue('#ss_insertSceneBreak', settings.insertSceneBreak ?? defaultSettings.insertSceneBreak);
-    setValue('#ss_trimAfterSceneBreak', settings.trimAfterSceneBreak ?? defaultSettings.trimAfterSceneBreak);
 
     // Radio for position
     const radios = container.querySelectorAll('input[name="injectPosition"]');
@@ -592,14 +590,7 @@ function updateContextControlVisibility(container) {
     // Let's visualy imply dependency: trimAfterSceneBreak is only relevant if limitToUnsummarised is ON.
 
     const limitCheckbox = container.querySelector('#ss_limitToUnsummarised');
-    const trimCheckbox = container.querySelector('#ss_trimAfterSceneBreak');
-    const insertCheckbox = container.querySelector('#ss_insertSceneBreak');
-
-    if (limitCheckbox && trimCheckbox) {
-        const enabled = limitCheckbox.checked;
-        trimCheckbox.disabled = !enabled;
-        trimCheckbox.parentElement.style.opacity = enabled ? '1' : '0.5';
-    }
+    // trimAfterSceneBreak removed as per user request (strict filtering enforced)
 }
 
 async function onSummariseClick() {
@@ -835,62 +826,54 @@ function filterChatCompletionPrompt(eventData) {
     if (!settings?.limitToUnsummarised) return;
     if (!Array.isArray(eventData?.chat)) return;
 
-    // Prefer precise trim using scene break marker if available
-    if (settings.trimAfterSceneBreak) {
-        let markerIndex = -1;
-        const latestSnapshot = getLatestSnapshot(chatState);
+    let markerIndex = -1;
+    const latestSnapshot = getLatestSnapshot(chatState);
 
-        // 1. Precise check: Find the marker linked to the latest snapshot
-        if (latestSnapshot?.id) {
-            for (let i = eventData.chat.length - 1; i >= 0; i--) {
-                const m = eventData.chat[i];
-                if (m?.extra?.scene_summariser_marker && m.extra.snapshot_id === latestSnapshot.id) {
-                    markerIndex = i;
-                    logDebug('log', `Found exact marker for snapshot #${latestSnapshot.id} at index ${i}`);
-                    break;
-                }
-            }
-        }
+    // 1. Precise check: Find the marker linked to the latest snapshot
+    // We scan BACKWARDS to find the most recent marker.
+    // We check for:
+    // A) Explicit snapshot_id in extra metadata (Created by this version)
+    // B) The unique CSS class or text content of the marker (Robust fallback for legacy/imported chats)
 
-        // 2. Legacy check: Fallback to stored marker ID if precise check failed
-        if (markerIndex === -1 && chatState.sceneBreakMarkerId) {
-            markerIndex = eventData.chat.findIndex(m =>
-                m?.mesid === chatState.sceneBreakMesId ||
-                m?.extra?.marker_id === chatState.sceneBreakMarkerId ||
-                (typeof m?.mes === 'string' && m.mes.includes(chatState.sceneBreakMarkerId))
-            );
-            if (markerIndex !== -1) {
-                logDebug('log', `Found legacy marker at index ${markerIndex}`);
-            }
-        }
+    // We do NOT require latestSnapshot to be present in memory; we trust the chat log content.
+    for (let i = eventData.chat.length - 1; i >= 0; i--) {
+        const m = eventData.chat[i];
 
-        if (markerIndex !== -1 && markerIndex < eventData.chat.length - 1) {
-            const trimmed = eventData.chat.slice(markerIndex + 1);
-            replacePromptMessages(eventData, trimmed);
-            logDebug('log', `Trimmed prompt after marker to ${trimmed.length} messages`);
-            return;
-        } else if (markerIndex !== -1) {
-            // Marker found but it is the last message (empty new context)
-            replacePromptMessages(eventData, []);
-            logDebug('log', 'Marker is the last message; cleared prompt');
-            return;
-        } else {
-            logDebug('warn', 'Marker not found in prompt; falling back to unsummarised slice');
+        const isStrictMatch = latestSnapshot?.id && m?.extra?.scene_summariser_marker && m.extra.snapshot_id === latestSnapshot.id;
+        const isContentMatch = typeof m?.mes === 'string' && (m.mes.includes('scene-summary-break') || m.mes.includes('Scene Summary Boundary'));
+
+        if (isStrictMatch || isContentMatch) {
+            markerIndex = i;
+            logDebug('log', `Found context cutoff marker at index ${i} (Strict: ${isStrictMatch}, Content: ${isContentMatch})`);
+            break; // Stop at the first (latest) marker found from the end
         }
     }
 
-    // Fallback: slice by lastSummarisedIndex
-    const ctx = getContext();
-    const chat = ctx?.chat || [];
-    const lastIdx = Math.min(chatState.lastSummarisedIndex || 0, chat.length);
-    const sliced = chat.slice(lastIdx);
+    // 2. Legacy check: Fallback to stored marker ID if precise check failed
+    // STRICT MODE: We still check for the marker object, but we DO NOT fall back to index math.
+    if (markerIndex === -1 && chatState.sceneBreakMarkerId) {
+        markerIndex = eventData.chat.findIndex(m =>
+            m?.mesid === chatState.sceneBreakMesId ||
+            m?.extra?.marker_id === chatState.sceneBreakMarkerId ||
+            (typeof m?.mes === 'string' && m.mes.includes(chatState.sceneBreakMarkerId))
+        );
+        if (markerIndex !== -1) {
+            logDebug('log', `Found legacy marker at index ${markerIndex}`);
+        }
+    }
 
-    if (!sliced.length) {
-        logDebug('warn', 'No messages after last summary; clearing prompt messages');
-        replacePromptMessages(eventData, []);
+    if (markerIndex !== -1 && markerIndex < eventData.chat.length - 1) {
+        const trimmed = eventData.chat.slice(markerIndex + 1);
+        replacePromptMessages(eventData, trimmed);
+        logDebug('log', `Trimmed prompt after marker to ${trimmed.length} messages`);
         return;
+    } else if (markerIndex !== -1) {
+        // Marker found but it is the last message (empty new context)
+        replacePromptMessages(eventData, []);
+        logDebug('log', 'Marker is the last message; cleared prompt');
+        return;
+    } else {
+        logDebug('warn', 'Marker not found in prompt; NOT trimming (fallback disabled).');
+        // Do nothing - send full context
     }
-
-    replacePromptMessages(eventData, sliced);
-    logDebug('log', `Trimmed chat prompt to ${sliced.length} messages (after last summary index=${lastIdx})`);
 }
