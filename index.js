@@ -303,6 +303,27 @@ function bindSettingsUI(container) {
         }
     });
 
+    // 1b) Auto-save summary text
+    container.addEventListener('input', (event) => {
+        if (!event.target.classList.contains('ss-snap-text')) return;
+        const id = Number(event.target.dataset.id);
+        const chatState = getChatState();
+        const snap = chatState.snapshots.find(s => s.id === id);
+        if (snap) {
+            snap.text = event.target.value;
+            saveSettingsDebounced();
+
+            // If this is the latest snapshot, update currentSummary input too so it stays in sync
+            const latest = getLatestSnapshot(chatState);
+            if (latest && latest.id === id) {
+                const currentSummary = container.querySelector('#ss_currentSummary');
+                if (currentSummary) currentSummary.value = snap.text;
+            }
+
+            applyInjection();
+        }
+    });
+
     // 2) Click delegation
     container.addEventListener('click', async (event) => {
         const actionEl = event.target.closest('[data-ss-action]');
@@ -404,11 +425,8 @@ function renderSnapshotsList(container, chatState, settings) {
                     <div class="setting_item">
                         <textarea class="text_pole ss-snap-text" data-id="${snap.id}" rows="6" style="width:100%; font-size:0.9em; font-family:inherit;">${snap.text || ''}</textarea>
                     </div>
-                    <div class="ss-action-bar" style="margin-top:5px;">
-                        <button class="menu_button" data-snap-action="save" data-snap-id="${snap.id}">
-                            <i class="fa-solid fa-save"></i> Save Text
-                        </button>
                     </div>
+                    <!-- Save button removed; auto-save is active -->
                 </div>
             </div>
         `;
@@ -426,18 +444,6 @@ async function handleSnapshotAction(action, snapshotId, chatState, container) {
         if (confirm(`Delete "${snap.title || 'this snapshot'}"?`)) {
             chatState.snapshots.splice(snapIndex, 1);
             logDebug('log', `Deleted snapshot ${snapshotId}`);
-        }
-    } else if (action === 'save') {
-        const textarea = container.querySelector(`.ss-snap-text[data-id="${snapshotId}"]`);
-        if (textarea) {
-            snap.text = textarea.value;
-            const btn = container.querySelector(`button[data-snap-action="save"][data-snap-id="${snapshotId}"]`);
-            if (btn) {
-                const original = btn.innerHTML;
-                btn.innerHTML = '<i class="fa-solid fa-check"></i> Saved!';
-                setTimeout(() => btn.innerHTML = original, 1500);
-            }
-            logDebug('log', `Saved snapshot ${snapshotId}`);
         }
     } else if (action === 'copy') {
         try {
@@ -628,12 +634,11 @@ async function onSummariseClick() {
         }
         chatState.lastSummarisedIndex = chat.length;
 
-        const currentSummaryEl = document.getElementById('ss_currentSummary');
-        if (currentSummaryEl) currentSummaryEl.value = buildSummaryText(chatState, settings);
-
         if (settings.insertSceneBreak) {
-            await insertSceneBreakMarker();
+            await insertSceneBreakMarker(nextId);
         }
+
+        updateSettingsUI(settingsContainer);
 
         applyInjection();
         saveSettingsDebounced();
@@ -704,7 +709,7 @@ function applyInjection() {
     }
 }
 
-async function insertSceneBreakMarker() {
+async function insertSceneBreakMarker(snapshotId) {
     const ctx = getContext();
     if (!ctx || !Array.isArray(ctx.chat)) return;
     const chatState = getChatState();
@@ -719,6 +724,7 @@ async function insertSceneBreakMarker() {
         extra: {
             scene_summariser_marker: true,
             marker_id: markerId,
+            snapshot_id: snapshotId,
         },
         send_date: Date.now(),
     };
@@ -738,7 +744,7 @@ async function insertSceneBreakMarker() {
 
     chatState.sceneBreakMarkerId = markerId;
     chatState.sceneBreakMesId = messageId;
-    logDebug('log', 'Inserted scene break marker', markerId, messageId);
+    logDebug('log', 'Inserted scene break marker', markerId, messageId, snapshotId);
 }
 
 jQuery(async () => {
@@ -772,17 +778,43 @@ function filterChatCompletionPrompt(eventData) {
     if (!Array.isArray(eventData?.chat)) return;
 
     // Prefer precise trim using scene break marker if available
-    if (settings.trimAfterSceneBreak && chatState.sceneBreakMarkerId && chatState.sceneBreakMesId !== null) {
-        const markerIndex = eventData.chat.findIndex(m =>
-            m?.mesid === chatState.sceneBreakMesId ||
-            m?.extra?.marker_id === chatState.sceneBreakMarkerId ||
-            (typeof m?.mes === 'string' && m.mes.includes(chatState.sceneBreakMarkerId))
-        );
+    if (settings.trimAfterSceneBreak) {
+        let markerIndex = -1;
+        const latestSnapshot = getLatestSnapshot(chatState);
+
+        // 1. Precise check: Find the marker linked to the latest snapshot
+        if (latestSnapshot?.id) {
+            for (let i = eventData.chat.length - 1; i >= 0; i--) {
+                const m = eventData.chat[i];
+                if (m?.extra?.scene_summariser_marker && m.extra.snapshot_id === latestSnapshot.id) {
+                    markerIndex = i;
+                    logDebug('log', `Found exact marker for snapshot #${latestSnapshot.id} at index ${i}`);
+                    break;
+                }
+            }
+        }
+
+        // 2. Legacy check: Fallback to stored marker ID if precise check failed
+        if (markerIndex === -1 && chatState.sceneBreakMarkerId) {
+            markerIndex = eventData.chat.findIndex(m =>
+                m?.mesid === chatState.sceneBreakMesId ||
+                m?.extra?.marker_id === chatState.sceneBreakMarkerId ||
+                (typeof m?.mes === 'string' && m.mes.includes(chatState.sceneBreakMarkerId))
+            );
+            if (markerIndex !== -1) {
+                logDebug('log', `Found legacy marker at index ${markerIndex}`);
+            }
+        }
 
         if (markerIndex !== -1 && markerIndex < eventData.chat.length - 1) {
             const trimmed = eventData.chat.slice(markerIndex + 1);
             replacePromptMessages(eventData, trimmed);
-            logDebug('log', `Trimmed prompt after marker (mesid=${chatState.sceneBreakMesId}) to ${trimmed.length} messages`);
+            logDebug('log', `Trimmed prompt after marker to ${trimmed.length} messages`);
+            return;
+        } else if (markerIndex !== -1) {
+            // Marker found but it is the last message (empty new context)
+            replacePromptMessages(eventData, []);
+            logDebug('log', 'Marker is the last message; cleared prompt');
             return;
         } else {
             logDebug('warn', 'Marker not found in prompt; falling back to unsummarised slice');
