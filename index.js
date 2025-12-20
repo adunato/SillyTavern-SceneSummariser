@@ -302,6 +302,10 @@ function bindSettingsUI(container) {
             updateInjectionVisibility(container);
         }
 
+        if (name === 'limitToUnsummarised') {
+            updateContextControlVisibility(container);
+        }
+
         if (['injectEnabled', 'injectPosition', 'injectDepth', 'injectScan', 'injectRole', 'injectTemplate'].includes(name)) {
             applyInjection();
         }
@@ -544,6 +548,7 @@ function updateSettingsUI(container) {
     radios.forEach(r => r.checked = String(r.value) === String(settings.injectPosition));
 
     updateInjectionVisibility(container);
+    updateContextControlVisibility(container);
 
     const wordsDisplay = container.querySelector('#ss_summaryWords_value');
     if (wordsDisplay) wordsDisplay.textContent = settings.summaryWords ?? defaultSettings.summaryWords;
@@ -572,6 +577,28 @@ function updateInjectionVisibility(container) {
     if (roleSelect) {
         roleSelect.disabled = !isInChat;
         roleSelect.style.opacity = isInChat ? '1' : '0.5';
+    }
+}
+
+function updateContextControlVisibility(container) {
+    if (!container) return;
+    const settings = extension_settings[settingsKey];
+    // limitToUnsummarised controls whether we are trimming at all.
+    // trimAfterSceneBreak is a refinement of HOW we trim.
+    // However, trimAfterSceneBreak creates a visual marker which is also controlled by insertSceneBreak.
+
+    // Logic: 
+    // If limitToUnsummarised is OFF, then trimAfterSceneBreak does nothing relevant to the prompt (though it might still run logic).
+    // Let's visualy imply dependency: trimAfterSceneBreak is only relevant if limitToUnsummarised is ON.
+
+    const limitCheckbox = container.querySelector('#ss_limitToUnsummarised');
+    const trimCheckbox = container.querySelector('#ss_trimAfterSceneBreak');
+    const insertCheckbox = container.querySelector('#ss_insertSceneBreak');
+
+    if (limitCheckbox && trimCheckbox) {
+        const enabled = limitCheckbox.checked;
+        trimCheckbox.disabled = !enabled;
+        trimCheckbox.parentElement.style.opacity = enabled ? '1' : '0.5';
     }
 }
 

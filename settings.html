@@ -38,7 +38,36 @@
                     <input type="number" id="ss_maxSummaries" name="maxSummaries" class="ss-setting-input text_pole"
                         min="1" max="50">
                 </div>
+
                 <hr>
+                <h4>Context Control</h4>
+                <div class="setting_item">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <input type="checkbox" id="ss_limitToUnsummarised" name="limitToUnsummarised"
+                            class="ss-setting-input">
+                        <label for="ss_limitToUnsummarised"
+                            title="If enabled, only messages sent after the last summary will be included in the prompt">Only
+                            send unsummarised messages</label>
+                    </div>
+                </div>
+                <div class="setting_item">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <input type="checkbox" id="ss_insertSceneBreak" name="insertSceneBreak"
+                            class="ss-setting-input">
+                        <label for="ss_insertSceneBreak"
+                            title="Inserts a visual separator in the chat log when a summary is generated">Insert visual
+                            scene break marker</label>
+                    </div>
+                </div>
+                <div class="setting_item">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <input type="checkbox" id="ss_trimAfterSceneBreak" name="trimAfterSceneBreak"
+                            class="ss-setting-input">
+                        <label for="ss_trimAfterSceneBreak"
+                            title="Uses the scene break marker to determine the exact cut-off point for context">Trim
+                            context at scene break</label>
+                    </div>
+                </div>
                 <h4>Injection</h4>
                 <div class="setting_item">
                     <label>Injection Template</label>
