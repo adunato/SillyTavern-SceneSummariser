@@ -7,9 +7,8 @@ import {
     setExtensionPrompt,
     extension_prompt_types,
     extension_prompt_roles,
-    eventSource,
-    event_types,
 } from '../../../../script.js';
+import { eventSource, event_types } from '../../../../scripts/events.js';
 
 const extensionName = 'SillyTavern-SceneSummariser';
 const settingsKey = extensionName;
@@ -145,6 +144,20 @@ function logDebug(level, ...args) {
     if (level === 'error') console.error(line);
     else if (level === 'warn') console.warn(line);
     else console.log(line);
+}
+
+function copyLogs() {
+    if (!debugMessages.length) {
+        toastr.info('No logs to copy');
+        return;
+    }
+    const text = debugMessages.join('\n');
+    navigator.clipboard.writeText(text).then(() => {
+        toastr.success('Debug logs copied to clipboard');
+    }).catch(err => {
+        console.error('Failed to copy logs:', err);
+        toastr.error('Failed to copy logs');
+    });
 }
 
 function ensureSettings() {
@@ -801,9 +814,11 @@ jQuery(async () => {
     await mountSettings();
     startButtonMount();
     try {
+        logDebug('log', `eventSource available: ${!!eventSource}`);
         eventSource?.on(event_types.CHAT_COMPLETION_PROMPT_READY, filterChatCompletionPrompt);
+        eventSource?.on(event_types.GENERATE_BEFORE_COMBINE_PROMPTS, filterTextCompletionPrompt);
         eventSource?.on(event_types.CHAT_CHANGED, onChatChanged);
-        logDebug('log', 'Registered prompt filter listener');
+        logDebug('log', 'Registered prompt filter listeners');
     } catch (err) {
         console.error(`[${extensionName}] Failed to register prompt filter:`, err);
     }
@@ -822,9 +837,12 @@ function replacePromptMessages(eventData, newMessages) {
 function filterChatCompletionPrompt(eventData) {
     ensureSettings();
     const settings = extension_settings[settingsKey];
-    const chatState = getChatState();
+    logDebug('log', `filterChatCompletionPrompt called. limitToUnsummarised=${settings?.limitToUnsummarised}`);
     if (!settings?.limitToUnsummarised) return;
-    if (!Array.isArray(eventData?.chat)) return;
+    if (!Array.isArray(eventData?.chat)) {
+        logDebug('warn', 'eventData.chat is not an array');
+        return;
+    }
 
     let markerIndex = -1;
     const latestSnapshot = getLatestSnapshot(chatState);
