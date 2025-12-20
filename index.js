@@ -399,7 +399,9 @@ function renderSnapshotsList(container, chatState, settings) {
                     ${dateStr} · ${wordCount} words
                 </div>
                 <div class="ss-snapshot-header-actions ss-no-propagate">
-                    <i class="fa-solid fa-trash ss-delete-icon" title="Delete Snapshot" data-snap-action="delete" data-snap-id="${snap.id}"></i>
+                    <i class="fa-solid fa-arrows-rotate ss-action-icon" title="Regenerate" data-snap-action="regen" data-snap-id="${snap.id}"></i>
+                    <i class="fa-solid fa-copy ss-action-icon" title="Copy Text" data-snap-action="copy" data-snap-id="${snap.id}"></i>
+                    <i class="fa-solid fa-trash ss-delete-icon ss-action-icon" title="Delete Snapshot" data-snap-action="delete" data-snap-id="${snap.id}"></i>
                 </div>
             </div>
             <div class="ss-snapshot-body">
@@ -409,12 +411,6 @@ function renderSnapshotsList(container, chatState, settings) {
                 <div class="ss-action-bar">
                     <button class="menu_button" data-snap-action="save" data-snap-id="${snap.id}">
                         <i class="fa-solid fa-save"></i> Save Text
-                    </button>
-                    <button class="menu_button" data-snap-action="regen" data-snap-id="${snap.id}">
-                        <i class="fa-solid fa-arrows-rotate"></i> Regenerate
-                    </button>
-                    <button class="menu_button" data-snap-action="copy" data-snap-id="${snap.id}">
-                        <i class="fa-solid fa-copy"></i> Copy
                     </button>
                 </div>
             </div>
@@ -453,15 +449,17 @@ async function handleSnapshotAction(action, snapshotId, chatState, container) {
             console.error('Copy failed', err);
         }
     } else if (action === 'regen') {
-        const btn = container.querySelector(`button[data-snap-action="regen"][data-snap-id="${snapshotId}"]`);
-        if (btn) {
-            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Generating...';
-            btn.disabled = true;
+        const icon = container.querySelector(`i[data-snap-action="regen"][data-snap-id="${snapshotId}"]`);
+        if (icon) {
+            icon.classList.remove('fa-arrows-rotate');
+            icon.classList.add('fa-spinner', 'fa-spin');
+            icon.style.pointerEvents = 'none';
         }
         await regenerateSnapshot(snap, settings, chatState);
-        if (btn) {
-            btn.disabled = false;
-            btn.innerHTML = '<i class="fa-solid fa-arrows-rotate"></i> Regenerate';
+        if (icon) {
+            icon.classList.remove('fa-spinner', 'fa-spin');
+            icon.classList.add('fa-arrows-rotate');
+            icon.style.pointerEvents = '';
         }
     }
 }

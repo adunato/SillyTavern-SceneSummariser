@@ -63,6 +63,7 @@
     justify-content: space-between;
     padding: 8px 10px;
     background-color: var(--grey20);
+    /* Match World Info/Lorebook header */
     cursor: pointer;
     user-select: none;
     transition: background-color 0.2s;
@@ -100,7 +101,31 @@
     font-size: 0.85em;
     color: var(--grey70);
     margin-left: auto;
-    margin-right: 10px;
+    margin-right: 15px;
+    /* More space from actions */
+}
+
+.ss-snapshot-header-actions {
+    display: flex;
+    gap: 10px;
+    /* Space between icons */
+    align-items: center;
+}
+
+.ss-action-icon {
+    opacity: 0.7;
+    transition: opacity 0.2s, color 0.2s;
+    cursor: pointer;
+    font-size: 1.1em;
+}
+
+.ss-action-icon:hover {
+    opacity: 1;
+    color: var(--SmartThemeUi, #fff);
+}
+
+.ss-delete-icon {
+    color: var(--smart-theme-red);
 }
 
 .ss-snapshot-body {
@@ -121,14 +146,10 @@
     flex-wrap: wrap;
 }
 
-.ss-delete-icon {
-    color: var(--smart-theme-red);
-    opacity: 0.7;
-    transition: opacity 0.2s;
-    cursor: pointer;
+.ss-header-buttons {
+    margin-left: auto;
 }
-.ss-delete-icon:hover { opacity: 1; }
 
-.ss-header-buttons { margin-left: auto; }
-
-.ss-snapshots-container { margin-top: 8px; }
+.ss-snapshots-container {
+    margin-top: 8px;
+}
