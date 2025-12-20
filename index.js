@@ -379,14 +379,12 @@ function renderSnapshotsList(container, chatState, settings) {
         emptyState.style.display = 'none';
     }
 
-    // Newest first
-    [...snapshots].reverse().forEach((snap) => {
-        const dateStr = new Date(snap.createdAt || Date.now()).toLocaleDateString();
-        const wordCount = snap.text ? snap.text.split(/\s+/).filter(Boolean).length : 0;
+    // Oldest first
+    [...snapshots].forEach((snap) => {
         const title = snap.title || `Scene #${snap.id}`;
 
         const item = document.createElement('div');
-        item.className = 'ss-snapshot-item';
+        item.className = 'ss-snapshot-item'; // Default state is collapsed (no 'expanded' class)
         item.dataset.id = snap.id;
 
         item.innerHTML = `
@@ -395,7 +393,7 @@ function renderSnapshotsList(container, chatState, settings) {
                     <div class="inline-drawer-toggle inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
                     <div class="ss-snapshot-header-content">
                          <div class="ss-snapshot-title text_pole textarea_compact" title="${title}">${title}</div>
-                         <div class="flex-container ss-no-propagate gap5px">
+                         <div class="ss-header-actions ss-no-propagate">
                                <i class="menu_button fa-solid fa-arrows-rotate ss-action-icon" title="Regenerate" data-snap-action="regen" data-snap-id="${snap.id}"></i>
                                <i class="menu_button fa-solid fa-copy ss-action-icon" title="Copy Text" data-snap-action="copy" data-snap-id="${snap.id}"></i>
                                <i class="menu_button fa-solid fa-trash-can ss-delete-icon ss-action-icon" title="Delete Snapshot" data-snap-action="delete" data-snap-id="${snap.id}"></i>
