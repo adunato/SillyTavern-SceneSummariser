@@ -512,7 +512,12 @@ async function regenerateSnapshot(snapshot, settings, chatState) {
 
     try {
         const result = await generateRaw({ prompt });
-        snapshot.text = (result || '').trim();
+        let cleaned = (result || '').trim();
+        if (cleaned.startsWith(prompt.trim())) {
+            cleaned = cleaned.substring(prompt.trim().length).trim();
+        }
+
+        snapshot.text = cleaned;
         snapshot.createdAt = Date.now();
         logDebug('log', `Regenerated snapshot ${snapshot.id}`);
     } catch (err) {
@@ -679,7 +684,10 @@ async function onSummariseClick() {
 
     try {
         const result = await generateRaw({ prompt });
-        const cleaned = (result || '').trim();
+        let cleaned = (result || '').trim();
+        if (cleaned.startsWith(prompt.trim())) {
+            cleaned = cleaned.substring(prompt.trim().length).trim();
+        }
         logDebug('log', 'LLM summary result', cleaned);
 
         // Update stored snapshot list
