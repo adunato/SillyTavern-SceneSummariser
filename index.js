@@ -333,11 +333,10 @@ function bindSettingsUI(container) {
             snap.text = event.target.value;
             saveSettingsDebounced();
 
-            // If this is the latest snapshot, update currentSummary input too so it stays in sync
-            const latest = getLatestSnapshot(chatState);
-            if (latest && latest.id === id) {
-                const currentSummary = container.querySelector('#ss_currentSummary');
-                if (currentSummary) currentSummary.value = snap.text;
+            // Refresh preview using full build logic (respects Store History)
+            const currentSummary = container.querySelector('#ss_currentSummary');
+            if (currentSummary) {
+                currentSummary.value = buildSummaryText(chatState, extension_settings[settingsKey]);
             }
 
             applyInjection();
