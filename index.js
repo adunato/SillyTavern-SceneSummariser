@@ -658,6 +658,12 @@ async function onSummariseClick() {
     const name1 = ctx?.name1 || 'User';
     const name2 = ctx?.name2 || 'Character';
 
+    logDebug('log', `Summarising with names: name1="${name1}", name2="${name2}"`);
+    if (newMessages.length > 0) {
+        const sample = newMessages[0];
+        logDebug('log', `Sample message: name="${sample.name}", is_user=${sample.is_user}, mes="${(sample.mes || '').substring(0, 20)}..."`);
+    }
+
     const transcript = newMessages
         .filter(m => !m.extra?.scene_summariser_marker)
         .slice(-50) // limit to most recent chunk to keep prompt small
