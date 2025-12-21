@@ -504,9 +504,15 @@ async function regenerateSnapshot(snapshot, settings, chatState) {
 
     const words = settings.summaryWords || defaultSettings.summaryWords;
     const promptTemplate = settings.summaryPrompt || defaultSettings.summaryPrompt;
+
+    // Fix: Only use summaries prior to this one as context
+    const snapshotIndex = chatState.snapshots.findIndex(s => s.id === snapshot.id);
+    const previousSnapshots = snapshotIndex > -1 ? chatState.snapshots.slice(0, snapshotIndex) : [];
+    const previousSummaryText = previousSnapshots.map(s => `${s.title}: ${s.text}`).join('\n');
+
     const prompt = promptTemplate
         .replace('{{words}}', words)
-        .replace('{{summary}}', snapshot.text || '')
+        .replace('{{summary}}', previousSummaryText || '')
         .replace('{{last_messages}}', transcript || '(no messages)');
 
     try {
