@@ -34,6 +34,14 @@
                         max="1000" step="10">
                 </div>
                 <div class="setting_item">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <input type="checkbox" id="ss_storeHistory" name="storeHistory" class="ss-setting-input">
+                        <label for="ss_storeHistory"
+                            title="If enabled, all stored summaries will be injected. If disabled, only the latest summary is injected.">Store
+                            History</label>
+                    </div>
+                </div>
+                <div class="setting_item">
                     <label>Max Snapshots History</label>
                     <input type="number" id="ss_maxSummaries" name="maxSummaries" class="ss-setting-input text_pole"
                         min="1" max="50">
