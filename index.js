@@ -516,7 +516,7 @@ async function regenerateSnapshot(snapshot, settings, chatState) {
         .replace('{{last_messages}}', transcript || '(no messages)');
 
     try {
-        const result = await generateRaw({ prompt });
+        const result = await generateRaw({ prompt, trimNames: false });
         let cleaned = (result || '').trim();
         if (cleaned.startsWith(prompt.trim())) {
             cleaned = cleaned.substring(prompt.trim().length).trim();
@@ -688,7 +688,7 @@ async function onSummariseClick() {
         + (!promptText.includes('{{last_messages}}') ? `\n\nChat history:\n${transcript}` : '');
 
     try {
-        const result = await generateRaw({ prompt });
+        const result = await generateRaw({ prompt, trimNames: false });
         let cleaned = (result || '').trim();
         if (cleaned.startsWith(prompt.trim())) {
             cleaned = cleaned.substring(prompt.trim().length).trim();
