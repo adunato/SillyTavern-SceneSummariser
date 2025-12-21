@@ -713,6 +713,7 @@ async function onSummariseClick() {
     } catch (error) {
         console.error(`[${extensionName}] Error during summarisation:`, error);
         logDebug('error', 'Summarisation error', error?.message || error);
+        toastr.error('Summarisation error: ' + (error?.message || error));
     } finally {
         if (button) {
             button.classList.remove('disabled');
