@@ -1022,7 +1022,8 @@ function applyInjection() {
 
     try {
         setExtensionPrompt(extensionName, value, position, depth, scan, role);
-        logDebug('log', `Injection updated (pos=${position}, depth=${depth}, scan=${scan}, role=${role})`);
+        const valuePreview = value ? (value.substring(0, 50).replace(/\n/g, ' ') + '...') : '[empty]';
+        logDebug('log', `[applyInjection] Injection updated (pos=${position}, depth=${depth}, scan=${scan}, role=${role}). Value preview: ${valuePreview}, value length: ${value ? value.length : 0}`);
     } catch (err) {
         console.error(`[${extensionName}] Failed to set injection prompt:`, err);
         logDebug('error', 'Failed to set injection prompt', err?.message || err);
@@ -1107,39 +1108,71 @@ async function filterContextInterceptor(chat, maxContext, abort, type) {
         return;
     }
 
-    let markerIndex = -1;
+    // Optional: Log the very last message just to see what kind of objects we're receiving
+    if (chat.length > 0) {
+        logDebug('log', `[filterContextInterceptor] Sample chat message keys: ${Object.keys(chat[chat.length - 1]).join(', ')}`);
+        const sampleMes = chat[chat.length - 1].mes || '';
+        logDebug('log', `[filterContextInterceptor] Sample chat message mes start: ${sampleMes.substring(0, 30)}...`);
+    }
+
+    const ctx = getContext();
+    const fullChat = ctx?.chat || [];
+    let markerIndexFull = -1;
     let foundType = 'none';
 
-    // Scan BACKWARDS for the marker
-    for (let i = chat.length - 1; i >= 0; i--) {
-        const m = chat[i];
+    // 1. SillyTavern filters out is_system messages from the chat array passed to generate_interceptor.
+    // Therefore, the marker will never be in `chat`. We scan BACKWARDS in `fullChat`.
+    for (let i = fullChat.length - 1; i >= 0; i--) {
+        const m = fullChat[i];
 
         // 1. Check Metadata (Robust)
         const isMetadataMarker = m?.extra?.scene_summariser_marker;
         if (isMetadataMarker) {
-            markerIndex = i;
+            markerIndexFull = i;
             foundType = 'metadata';
-            logDebug('log', `[filterContextInterceptor] Found cutoff marker via Metadata at index ${i}`);
+            logDebug('log', `[filterContextInterceptor] Found cutoff marker via Metadata at fullChat index ${i}`);
             break;
         }
 
         // 2. Check Content (Fallback)
         const content = m?.mes || '';
         if (content.includes('scene-summary-break') || content.includes('Scene Summary Boundary') || content.includes('data-marker-id="scene-break')) {
-            markerIndex = i;
+            markerIndexFull = i;
             foundType = 'content';
-            logDebug('log', `[filterContextInterceptor] Found cutoff marker via Content fallback at index ${i}`);
+            logDebug('log', `[filterContextInterceptor] Found cutoff marker via Content fallback at fullChat index ${i}`);
             break;
         }
     }
 
-    if (markerIndex !== -1) {
-        const removedItemsCount = markerIndex + 1;
-        logDebug('log', `[filterContextInterceptor] Filtering request. Marker type=${foundType} at ${markerIndex}. Removing ${removedItemsCount} messages from top.`);
-        chat.splice(0, removedItemsCount);
+    if (markerIndexFull !== -1) {
+        // 2. Map the marker index in `fullChat` to the generated subset `chat`.
+        // We know `chat` is a strict filtered subsequence of `fullChat` containing non-system messages.
+        let chatPtr = 0;
+        for (let i = 0; i <= markerIndexFull; i++) {
+            const fMsg = fullChat[i];
+            const cMsg = chat[chatPtr];
+            if (!cMsg) break;
+
+            // Check if fMsg structurally matches cMsg.
+            // SillyTavern guarantees preserved send_date, name, and is_user in the copied array.
+            const isMatch = fMsg.send_date === cMsg.send_date &&
+                !!fMsg.is_user === !!cMsg.is_user &&
+                !!fMsg.is_system === !!cMsg.is_system &&
+                fMsg.name === cMsg.name;
+
+            if (isMatch) {
+                chatPtr++;
+            }
+        }
+
+        const removedItemsCount = chatPtr;
+        logDebug('log', `[filterContextInterceptor] Filtering request. Marker type=${foundType} at fullChat index ${markerIndexFull}. Removing ${removedItemsCount} matched messages from coreChat.`);
+        if (removedItemsCount > 0) {
+            chat.splice(0, removedItemsCount);
+        }
         logDebug('log', `[filterContextInterceptor] Final chat array length after splicing: ${chat.length}`);
     } else {
-        logDebug('log', '[filterContextInterceptor] Limit enabled but neither metadata nor content marker found. Sending full context.');
+        logDebug('log', '[filterContextInterceptor] Limit enabled but neither metadata nor content marker found in fullChat. Sending full context.');
     }
 }
 
