@@ -938,14 +938,23 @@ async function onBatchSummariseClick() {
                 name: extensionName,
                 is_user: false,
                 is_system: true,
+                send_date: Date.now(),
                 mes: markerHtml,
                 extra: {
                     scene_summariser_marker: true,
                     marker_id: markerId,
                     snapshot_id: ins.id,
-                },
-                send_date: Date.now(),
+                }
             };
+
+            // Add the extra fields in a way ST's chat parser expects
+            if (typeof message.extra !== 'object') {
+                message.extra = {};
+            }
+            message.extra.scene_summariser_marker = true;
+            message.extra.marker_id = markerId;
+            message.extra.snapshot_id = ins.id;
+
             fullChat.splice(ins.index, 0, message);
         }
         modifiedChat = true;
@@ -1091,11 +1100,16 @@ async function filterContextInterceptor(chat, maxContext, abort, type) {
 
     ensureSettings();
     const settings = extension_settings[settingsKey];
-    logDebug('log', `filterContextInterceptor called. limitToUnsummarised=${settings?.limitToUnsummarised}`);
+    logDebug('log', `[filterContextInterceptor] Triggered. type=${type}, maxContext=${maxContext}, original_chat_length=${chat.length}, limitToUnsummarised=${settings?.limitToUnsummarised}`);
 
-    if (!settings?.limitToUnsummarised) return;
+    if (!settings?.limitToUnsummarised) {
+        logDebug('log', '[filterContextInterceptor] limitToUnsummarised is disabled. Bailing out.');
+        return;
+    }
 
     let markerIndex = -1;
+    let foundType = 'none';
+
     // Scan BACKWARDS for the marker
     for (let i = chat.length - 1; i >= 0; i--) {
         const m = chat[i];
@@ -1104,27 +1118,28 @@ async function filterContextInterceptor(chat, maxContext, abort, type) {
         const isMetadataMarker = m?.extra?.scene_summariser_marker;
         if (isMetadataMarker) {
             markerIndex = i;
-            logDebug('log', `Found context cutoff marker (Metadata) at index ${i}`);
+            foundType = 'metadata';
+            logDebug('log', `[filterContextInterceptor] Found cutoff marker via Metadata at index ${i}`);
             break;
         }
 
         // 2. Check Content (Fallback)
         const content = m?.mes || '';
-        if (content.includes('scene-summary-break') || content.includes('Scene Summary Boundary')) {
+        if (content.includes('scene-summary-break') || content.includes('Scene Summary Boundary') || content.includes('data-marker-id="scene-break')) {
             markerIndex = i;
-            logDebug('log', `Found context cutoff marker (Content) at index ${i}`);
+            foundType = 'content';
+            logDebug('log', `[filterContextInterceptor] Found cutoff marker via Content fallback at index ${i}`);
             break;
         }
     }
 
     if (markerIndex !== -1) {
-        logDebug('log', `Filtering request. Found marker at ${markerIndex}. Keeping messages AFTER this index.`);
-        // Mutate the chat array directly - splice out everything from 0 up to (and including) markerIndex
-        // We want to KEEP messages starting from markerIndex + 1
-        // So we remove (markerIndex + 1) items from the start.
-        chat.splice(0, markerIndex + 1);
+        const removedItemsCount = markerIndex + 1;
+        logDebug('log', `[filterContextInterceptor] Filtering request. Marker type=${foundType} at ${markerIndex}. Removing ${removedItemsCount} messages from top.`);
+        chat.splice(0, removedItemsCount);
+        logDebug('log', `[filterContextInterceptor] Final chat array length after splicing: ${chat.length}`);
     } else {
-        logDebug('log', 'Limit enabled but no marker found. Sending full context.');
+        logDebug('log', '[filterContextInterceptor] Limit enabled but neither metadata nor content marker found. Sending full context.');
     }
 }
 
