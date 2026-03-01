@@ -7,6 +7,7 @@ import {
     setExtensionPrompt,
     extension_prompt_types,
     extension_prompt_roles,
+    reloadCurrentChat,
 } from '../../../../script.js';
 import { eventSource, event_types } from '../../../../scripts/events.js';
 
@@ -801,13 +802,20 @@ async function onBatchSummariseClick() {
     const ctx = getContext();
     const fullChat = ctx?.chat || [];
 
-    // Filter out existing scene markers but keep original indexes for references
-    // Better to filter content that we send, but keep index tracking aligned with original array
-    // Better to filter content that we send, but keep index tracking aligned with original array
+    // Strip old markers from fullChat to reset the state physically
+    let modifiedChat = false;
+    for (let i = fullChat.length - 1; i >= 0; i--) {
+        if (fullChat[i].extra?.scene_summariser_marker) {
+            fullChat.splice(i, 1);
+            modifiedChat = true;
+        }
+    }
+
+    // Now track valid messages. The originalIndex will map perfectly to fullChat.
     // Also skip the very first system message if it represents the scenario prompt
     const validMessages = [];
     for (let i = 0; i < fullChat.length; i++) {
-        if (!fullChat[i].extra?.scene_summariser_marker && !fullChat[i].is_system) {
+        if (!fullChat[i].is_system) {
             validMessages.push({ msg: fullChat[i], originalIndex: i });
         }
     }
@@ -839,6 +847,7 @@ async function onBatchSummariseClick() {
 
     const totalBatches = batches.length;
     let successCount = 0;
+    const markersToInsert = [];
 
     for (let i = 0; i < totalBatches; i++) {
         const batch = batches[i];
@@ -897,8 +906,10 @@ async function onBatchSummariseClick() {
             chatState.snapshots.push(snapshot);
             chatState.lastSummarisedIndex = batchToIndex;
 
-            // We do NOT call insertSceneBreakMarker here to avoid spamming the chat log on batches,
-            // or perhaps optionally we could? For now skip it to keep chat clean.
+            if (settings.insertSceneBreak) {
+                markersToInsert.push({ index: batchToIndex, id: nextId });
+            }
+
             successCount++;
 
             // Update UI dynamically to show the new snapshot
@@ -914,6 +925,35 @@ async function onBatchSummariseClick() {
     if (button) {
         button.classList.remove('disabled');
         button.innerHTML = originalText;
+    }
+
+    if (markersToInsert.length > 0) {
+        // Insert markers in reverse order so we don't shift earlier indices
+        markersToInsert.sort((a, b) => b.index - a.index);
+
+        for (const ins of markersToInsert) {
+            const markerId = `scene-break-${Date.now()}-${ins.id}`;
+            const markerHtml = `<details class="scene-summary-break" data-marker-id="${markerId}"><summary>📑 Scene Summary Boundary</summary><div>Summaries above; new messages below.</div></details>`;
+            const message = {
+                name: extensionName,
+                is_user: false,
+                is_system: true,
+                mes: markerHtml,
+                extra: {
+                    scene_summariser_marker: true,
+                    marker_id: markerId,
+                    snapshot_id: ins.id,
+                },
+                send_date: Date.now(),
+            };
+            fullChat.splice(ins.index, 0, message);
+        }
+        modifiedChat = true;
+    }
+
+    if (modifiedChat) {
+        if (typeof ctx.saveChat === 'function') await ctx.saveChat();
+        if (typeof reloadCurrentChat === 'function') await reloadCurrentChat();
     }
 
     if (successCount > 0) {
