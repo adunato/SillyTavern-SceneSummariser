@@ -46,6 +46,12 @@
                     <input type="number" id="ss_maxSummaries" name="maxSummaries" class="ss-setting-input text_pole"
                         min="1" max="50">
                 </div>
+                <div class="setting_item" style="margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--grey40);">
+                    <label>Batch Size (Messages): <span id="ss_batchSize_value"></span></label>
+                    <input type="range" id="ss_batchSize" name="batchSize" class="ss-setting-input" min="10"
+                        max="200" step="5">
+                    <small>Number of messages to summarize in each batch run.</small>
+                </div>
 
                 <hr>
                 <h4>Context Control</h4>
@@ -141,7 +147,9 @@
             <div class="settings_section">
                 <h4 style="display:flex; justify-content:space-between; align-items:center;">
                     Snapshots
-
+                    <button id="ss_batch_summarise_button" class="menu_button interactable" style="font-size: 0.9em; padding: 4px 8px;">
+                        <i class="fa-solid fa-layer-group"></i> Run Batch Summarisation
+                    </button>
                 </h4>
 
                 <div id="ss_snapshots_list" class="ss-snapshots-container"></div>

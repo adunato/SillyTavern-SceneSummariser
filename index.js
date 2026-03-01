@@ -29,6 +29,7 @@ const defaultSettings = {
     injectTemplate: '[Summary: {{summary}}]',
     limitToUnsummarised: false,
     insertSceneBreak: true,
+    batchSize: 50,
 };
 
 const chatStateDefaults = {
@@ -318,6 +319,11 @@ function bindSettingsUI(container) {
             updateContextControlVisibility(container);
         }
 
+        if (name === 'batchSize') {
+            const display = container.querySelector('#ss_batchSize_value');
+            if (display) display.textContent = newValue;
+        }
+
         if (['injectEnabled', 'injectPosition', 'injectDepth', 'injectScan', 'injectRole', 'injectTemplate'].includes(name)) {
             applyInjection();
         }
@@ -395,6 +401,11 @@ function bindSettingsUI(container) {
     const summariseButton = container.querySelector('#ss_summarise_button');
     if (summariseButton) {
         summariseButton.addEventListener('click', onSummariseClick);
+    }
+
+    const batchSummariseButton = container.querySelector('#ss_batch_summarise_button');
+    if (batchSummariseButton) {
+        batchSummariseButton.addEventListener('click', onBatchSummariseClick);
     }
 }
 
@@ -563,6 +574,7 @@ function updateSettingsUI(container) {
     setValue('#ss_injectTemplate', settings.injectTemplate ?? defaultSettings.injectTemplate);
     setValue('#ss_limitToUnsummarised', settings.limitToUnsummarised ?? defaultSettings.limitToUnsummarised);
     setValue('#ss_insertSceneBreak', settings.insertSceneBreak ?? defaultSettings.insertSceneBreak);
+    setValue('#ss_batchSize', settings.batchSize ?? defaultSettings.batchSize);
 
     // Radio for position
     const radios = container.querySelectorAll('input[name="injectPosition"]');
@@ -573,6 +585,9 @@ function updateSettingsUI(container) {
 
     const wordsDisplay = container.querySelector('#ss_summaryWords_value');
     if (wordsDisplay) wordsDisplay.textContent = settings.summaryWords ?? defaultSettings.summaryWords;
+
+    const batchSizeDisplay = container.querySelector('#ss_batchSize_value');
+    if (batchSizeDisplay) batchSizeDisplay.textContent = settings.batchSize ?? defaultSettings.batchSize;
 
     const currentSummary = container.querySelector('#ss_currentSummary');
     if (currentSummary) currentSummary.value = buildSummaryText(chatState, settings);
@@ -734,6 +749,159 @@ async function onSummariseClick() {
         }
         isSummarising = false;
     }
+}
+
+async function onBatchSummariseClick() {
+    if (isSummarising) return;
+    ensureSettings();
+    if (!extension_settings[settingsKey]?.enabled) {
+        console.warn(`[${extensionName}] Summariser disabled.`);
+        return;
+    }
+
+    const settings = extension_settings[settingsKey];
+    const batchSize = Number(settings.batchSize || defaultSettings.batchSize);
+
+    if (!confirm(`This will delete all existing Scene Summaries and generate new ones in batches of ${batchSize} messages from the beginning of the chat. Proceed?`)) {
+        return;
+    }
+
+    isSummarising = true;
+
+    const button = document.getElementById('ss_batch_summarise_button');
+    const originalText = button?.innerHTML;
+    if (button) {
+        button.classList.add('disabled');
+        button.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Initializing Batch...';
+    }
+    logDebug('log', 'Batch Summarise clicked');
+
+    const chatState = getChatState();
+    const words = settings.summaryWords || defaultSettings.summaryWords;
+    const promptTemplate = settings.summaryPrompt || defaultSettings.summaryPrompt;
+
+    // Reset state
+    chatState.snapshots = [];
+    chatState.summaryCounter = 0;
+    chatState.lastSummarisedIndex = 0;
+
+    const ctx = getContext();
+    const fullChat = ctx?.chat || [];
+
+    // Filter out existing scene markers but keep original indexes for references
+    // Better to filter content that we send, but keep index tracking aligned with original array
+    const validMessages = [];
+    for (let i = 0; i < fullChat.length; i++) {
+        if (!fullChat[i].extra?.scene_summariser_marker) {
+            validMessages.push({ msg: fullChat[i], originalIndex: i });
+        }
+    }
+
+    if (!validMessages.length) {
+        if (button) {
+            button.classList.remove('disabled');
+            button.innerHTML = originalText;
+        }
+        isSummarising = false;
+        toastr.info('No messages to summarise.');
+        return;
+    }
+
+    const name1 = ctx?.name1 || 'User';
+    const name2 = ctx?.name2 || 'Character';
+
+    // Create batches
+    const batches = [];
+    for (let i = 0; i < validMessages.length; i += batchSize) {
+        batches.push(validMessages.slice(i, i + batchSize));
+    }
+
+    const totalBatches = batches.length;
+    let successCount = 0;
+
+    for (let i = 0; i < totalBatches; i++) {
+        const batch = batches[i];
+        if (!batch.length) continue;
+
+        if (button) {
+            button.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Batch ${i + 1} of ${totalBatches}...`;
+        }
+
+        const allSummariesContext = (chatState.snapshots || [])
+            .map(s => `${s.title || 'Scene #' + s.id}: ${s.text}`)
+            .join('\n');
+
+        const promptText = promptTemplate
+            .replace('{{words}}', words)
+            .replace('{{summary}}', allSummariesContext);
+
+        const transcript = batch
+            .map(({ msg }) => {
+                const speaker = msg.name || (msg.is_user ? name1 : name2);
+                return `${speaker}: ${msg.mes || ''}`.trim();
+            })
+            .join('\n');
+
+        const prompt = promptText
+            .replace('{{last_messages}}', transcript || '(no new messages)')
+            + (!promptText.includes('{{last_messages}}') ? `\n\nChat history:\n${transcript}` : '');
+
+        try {
+            const result = await generateRaw({ prompt, trimNames: false });
+            let cleaned = (result || '').trim();
+            if (cleaned.startsWith(prompt.trim())) {
+                cleaned = cleaned.substring(prompt.trim().length).trim();
+            }
+            logDebug('log', `LLM batch summary result ${i + 1}/${totalBatches}`, cleaned);
+
+            // Update stored snapshot list
+            const nextId = (chatState.summaryCounter ?? 0) + 1;
+
+            // Getting the original index bounds for this batch
+            const batchFromIndex = batch[0].originalIndex;
+            const batchToIndex = batch[batch.length - 1].originalIndex + 1; // exclusive end
+
+            const snapshot = {
+                id: nextId,
+                title: `Scene #${nextId}`,
+                text: cleaned,
+                createdAt: Date.now(),
+                fromIndex: batchFromIndex,
+                toIndex: batchToIndex,
+                source: 'batch',
+                words,
+            };
+
+            chatState.summaryCounter = nextId;
+            chatState.snapshots.push(snapshot);
+            chatState.lastSummarisedIndex = batchToIndex;
+
+            // We do NOT call insertSceneBreakMarker here to avoid spamming the chat log on batches,
+            // or perhaps optionally we could? For now skip it to keep chat clean.
+            successCount++;
+
+            // Update UI dynamically to show the new snapshot
+            updateSettingsUI(settingsContainer);
+        } catch (error) {
+            console.error(`[${extensionName}] Error during batch summarisation (batch ${i + 1}):`, error);
+            logDebug('error', `Batch ${i + 1} error`, error?.message || error);
+            toastr.error(`Error generating batch ${i + 1}. Stopping.`);
+            break; // Stop remaining batches on error
+        }
+    }
+
+    if (button) {
+        button.classList.remove('disabled');
+        button.innerHTML = originalText;
+    }
+
+    if (successCount > 0) {
+        toastr.success(`Successfully generated ${successCount} summaries.`);
+    }
+
+    applyInjection();
+    saveSettingsDebounced();
+    isSummarising = false;
 }
 
 function applyInjection() {
