@@ -803,9 +803,11 @@ async function onBatchSummariseClick() {
 
     // Filter out existing scene markers but keep original indexes for references
     // Better to filter content that we send, but keep index tracking aligned with original array
+    // Better to filter content that we send, but keep index tracking aligned with original array
+    // Also skip the very first system message if it represents the scenario prompt
     const validMessages = [];
     for (let i = 0; i < fullChat.length; i++) {
-        if (!fullChat[i].extra?.scene_summariser_marker) {
+        if (!fullChat[i].extra?.scene_summariser_marker && !fullChat[i].is_system) {
             validMessages.push({ msg: fullChat[i], originalIndex: i });
         }
     }
@@ -831,8 +833,8 @@ async function onBatchSummariseClick() {
 
     const maxBatchSummaries = Number(settings.maxBatchSummaries || defaultSettings.maxBatchSummaries);
     if (maxBatchSummaries > 0 && batches.length > maxBatchSummaries) {
-        // Keep the most recent ones if we exceed the limit
-        batches = batches.slice(-maxBatchSummaries);
+        // Keep only the first N batches
+        batches = batches.slice(0, maxBatchSummaries);
     }
 
     const totalBatches = batches.length;
