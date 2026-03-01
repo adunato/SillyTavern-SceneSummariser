@@ -30,6 +30,7 @@ const defaultSettings = {
     limitToUnsummarised: false,
     insertSceneBreak: true,
     batchSize: 50,
+    maxBatchSummaries: 0,
 };
 
 const chatStateDefaults = {
@@ -324,6 +325,11 @@ function bindSettingsUI(container) {
             if (display) display.textContent = newValue;
         }
 
+        if (name === 'maxBatchSummaries') {
+            const display = container.querySelector('#ss_maxBatchSummaries_value');
+            if (display) display.textContent = newValue;
+        }
+
         if (['injectEnabled', 'injectPosition', 'injectDepth', 'injectScan', 'injectRole', 'injectTemplate'].includes(name)) {
             applyInjection();
         }
@@ -575,6 +581,7 @@ function updateSettingsUI(container) {
     setValue('#ss_limitToUnsummarised', settings.limitToUnsummarised ?? defaultSettings.limitToUnsummarised);
     setValue('#ss_insertSceneBreak', settings.insertSceneBreak ?? defaultSettings.insertSceneBreak);
     setValue('#ss_batchSize', settings.batchSize ?? defaultSettings.batchSize);
+    setValue('#ss_maxBatchSummaries', settings.maxBatchSummaries ?? defaultSettings.maxBatchSummaries);
 
     // Radio for position
     const radios = container.querySelectorAll('input[name="injectPosition"]');
@@ -588,6 +595,9 @@ function updateSettingsUI(container) {
 
     const batchSizeDisplay = container.querySelector('#ss_batchSize_value');
     if (batchSizeDisplay) batchSizeDisplay.textContent = settings.batchSize ?? defaultSettings.batchSize;
+
+    const maxBatchSummariesDisplay = container.querySelector('#ss_maxBatchSummaries_value');
+    if (maxBatchSummariesDisplay) maxBatchSummariesDisplay.textContent = settings.maxBatchSummaries ?? defaultSettings.maxBatchSummaries;
 
     const currentSummary = container.querySelector('#ss_currentSummary');
     if (currentSummary) currentSummary.value = buildSummaryText(chatState, settings);
@@ -811,9 +821,15 @@ async function onBatchSummariseClick() {
     const name2 = ctx?.name2 || 'Character';
 
     // Create batches
-    const batches = [];
+    let batches = [];
     for (let i = 0; i < validMessages.length; i += batchSize) {
         batches.push(validMessages.slice(i, i + batchSize));
+    }
+
+    const maxBatchSummaries = Number(settings.maxBatchSummaries || defaultSettings.maxBatchSummaries);
+    if (maxBatchSummaries > 0 && batches.length > maxBatchSummaries) {
+        // Keep the most recent ones if we exceed the limit
+        batches = batches.slice(-maxBatchSummaries);
     }
 
     const totalBatches = batches.length;
