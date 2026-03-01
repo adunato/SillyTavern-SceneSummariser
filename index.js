@@ -57,8 +57,11 @@ function getLatestSnapshot(chatState) {
 function buildSummaryText(chatState, settings) {
     if (!chatState?.snapshots?.length) return '';
     if (settings?.storeHistory) {
-        const max = settings.maxSummaries || defaultSettings.maxSummaries;
-        const lastSnapshots = chatState.snapshots.slice(-max);
+        const max = settings.maxSummaries !== undefined ? settings.maxSummaries : defaultSettings.maxSummaries;
+        let lastSnapshots = chatState.snapshots;
+        if (max > 0) {
+            lastSnapshots = chatState.snapshots.slice(-max);
+        }
         return lastSnapshots.map(s => `${s.title}: ${s.text}`).join('\n');
     }
     const latest = getLatestSnapshot(chatState);
