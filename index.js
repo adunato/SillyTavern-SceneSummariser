@@ -32,6 +32,7 @@ const defaultSettings = {
     insertSceneBreak: true,
     batchSize: 50,
     maxBatchSummaries: 0,
+    keepMessagesCount: 0,
 };
 
 const chatStateDefaults = {
@@ -334,6 +335,11 @@ function bindSettingsUI(container) {
             if (display) display.textContent = newValue;
         }
 
+        if (name === 'keepMessagesCount') {
+            const display = container.querySelector('#ss_keepMessagesCount_value');
+            if (display) display.textContent = newValue;
+        }
+
         if (['injectEnabled', 'injectPosition', 'injectDepth', 'injectScan', 'injectRole', 'injectTemplate'].includes(name)) {
             applyInjection();
         }
@@ -586,6 +592,7 @@ function updateSettingsUI(container) {
     setValue('#ss_insertSceneBreak', settings.insertSceneBreak ?? defaultSettings.insertSceneBreak);
     setValue('#ss_batchSize', settings.batchSize ?? defaultSettings.batchSize);
     setValue('#ss_maxBatchSummaries', settings.maxBatchSummaries ?? defaultSettings.maxBatchSummaries);
+    setValue('#ss_keepMessagesCount', settings.keepMessagesCount ?? defaultSettings.keepMessagesCount);
 
     // Radio for position
     const radios = container.querySelectorAll('input[name="injectPosition"]');
@@ -602,6 +609,9 @@ function updateSettingsUI(container) {
 
     const maxBatchSummariesDisplay = container.querySelector('#ss_maxBatchSummaries_value');
     if (maxBatchSummariesDisplay) maxBatchSummariesDisplay.textContent = settings.maxBatchSummaries ?? defaultSettings.maxBatchSummaries;
+
+    const keepMessagesCountDisplay = container.querySelector('#ss_keepMessagesCount_value');
+    if (keepMessagesCountDisplay) keepMessagesCountDisplay.textContent = settings.keepMessagesCount ?? defaultSettings.keepMessagesCount;
 
     const currentSummary = container.querySelector('#ss_currentSummary');
     if (currentSummary) currentSummary.value = buildSummaryText(chatState, settings);
@@ -1165,8 +1175,9 @@ async function filterContextInterceptor(chat, maxContext, abort, type) {
             }
         }
 
-        const removedItemsCount = chatPtr;
-        logDebug('log', `[filterContextInterceptor] Filtering request. Marker type=${foundType} at fullChat index ${markerIndexFull}. Removing ${removedItemsCount} matched messages from coreChat.`);
+        const keepCount = Number(settings?.keepMessagesCount || 0);
+        const removedItemsCount = Math.max(0, chatPtr - keepCount);
+        logDebug('log', `[filterContextInterceptor] Filtering request. Marker type=${foundType} at fullChat index ${markerIndexFull}. Removing ${removedItemsCount} matched messages from coreChat (retaining ${keepCount}).`);
         if (removedItemsCount > 0) {
             chat.splice(0, removedItemsCount);
         }
