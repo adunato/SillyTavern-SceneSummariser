@@ -24,6 +24,11 @@
             <div class="settings_section">
                 <h4>General &amp; Generation</h4>
                 <div class="setting_item">
+                    <label for="ss_connectionProfile">Connection Profile</label>
+                    <select id="ss_connectionProfile" class="text_pole" title="Select a dedicated Connection Profile for summarisation. Leave blank to use the main chat API."></select>
+                    <small style="display:block; margin-top:4px; opacity:0.7;">Select a Connection Manager profile to use a dedicated model/API for summarisation. Blank = main chat API.</small>
+                </div>
+                <div class="setting_item">
                     <label>Summary Prompt</label>
                     <textarea id="ss_summaryPrompt" name="summaryPrompt" class="ss-setting-input text_pole" rows="3"
                         placeholder="Prompt used to generate summaries..."></textarea>

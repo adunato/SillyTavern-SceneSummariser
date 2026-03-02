@@ -10,6 +10,7 @@ import {
     reloadCurrentChat,
 } from '../../../../script.js';
 import { eventSource, event_types } from '../../../../scripts/events.js';
+import { ConnectionManagerRequestService } from '../../../scripts/extensions/shared.js';
 
 const extensionName = 'SillyTavern-SceneSummariser';
 const settingsKey = extensionName;
@@ -33,6 +34,7 @@ const defaultSettings = {
     batchSize: 50,
     maxBatchSummaries: 0,
     keepMessagesCount: 0,
+    connectionProfileId: '',
 };
 
 const chatStateDefaults = {
@@ -423,6 +425,28 @@ function bindSettingsUI(container) {
     if (batchSummariseButton) {
         batchSummariseButton.addEventListener('click', onBatchSummariseClick);
     }
+
+    // Connection Profile dropdown — powered by Connection Manager
+    try {
+        const settings = extension_settings[settingsKey];
+        ConnectionManagerRequestService.handleDropdown(
+            '#ss_connectionProfile',
+            settings.connectionProfileId || '',
+            async (profile) => {
+                extension_settings[settingsKey].connectionProfileId = profile?.id || '';
+                saveSettingsDebounced();
+                logDebug('log', `Connection Profile set to: ${profile?.name || '<none>'}`);
+            },
+        );
+    } catch (err) {
+        // Connection Manager may not be available (disabled extension, etc.)
+        const select = container.querySelector('#ss_connectionProfile');
+        if (select) {
+            select.innerHTML = '<option value="">Connection Manager not available</option>';
+            select.disabled = true;
+        }
+        logDebug('warn', 'Could not initialise Connection Profile dropdown', err?.message || err);
+    }
 }
 
 function togglePanel(container, selector) {
@@ -513,6 +537,35 @@ async function handleSnapshotAction(action, snapshotId, chatState, container) {
     }
 }
 
+/**
+ * Calls the LLM for summarisation. Uses the configured Connection Profile if set,
+ * otherwise falls back to the main API via generateRaw.
+ * @param {string} prompt The prompt to send to the LLM.
+ * @returns {Promise<string>} The raw LLM response text.
+ */
+async function callSummarisationLLM(prompt) {
+    const settings = extension_settings[settingsKey];
+    const profileId = settings?.connectionProfileId || '';
+
+    if (profileId) {
+        try {
+            logDebug('log', `Using Connection Profile "${profileId}" for summarisation`);
+            const response = await ConnectionManagerRequestService.sendRequest(
+                profileId,
+                prompt,
+                settings.summaryWords ? settings.summaryWords * 4 : 1024, // rough token estimate
+            );
+            // ExtractedData shape: { content: string, reasoning: string }
+            return response?.content ?? String(response ?? '');
+        } catch (err) {
+            logDebug('error', 'Connection Profile request failed, falling back to generateRaw', err?.message || err);
+            console.warn(`[${extensionName}] Connection Profile failed, falling back to main API:`, err);
+        }
+    }
+
+    return await generateRaw({ prompt, trimNames: false });
+}
+
 async function regenerateSnapshot(snapshot, settings, chatState) {
     const ctx = getContext();
     const chat = ctx?.chat || [];
@@ -543,7 +596,7 @@ async function regenerateSnapshot(snapshot, settings, chatState) {
         .replace('{{last_messages}}', transcript || '(no messages)');
 
     try {
-        const result = await generateRaw({ prompt, trimNames: false });
+        const result = await callSummarisationLLM(prompt);
         let cleaned = (result || '').trim();
         if (cleaned.startsWith(prompt.trim())) {
             cleaned = cleaned.substring(prompt.trim().length).trim();
@@ -727,7 +780,7 @@ async function onSummariseClick() {
         + (!promptText.includes('{{last_messages}}') ? `\n\nChat history:\n${transcript}` : '');
 
     try {
-        const result = await generateRaw({ prompt, trimNames: false });
+        const result = await callSummarisationLLM(prompt);
         let cleaned = (result || '').trim();
         if (cleaned.startsWith(prompt.trim())) {
             cleaned = cleaned.substring(prompt.trim().length).trim();
@@ -887,7 +940,7 @@ async function onBatchSummariseClick() {
             + (!promptText.includes('{{last_messages}}') ? `\n\nChat history:\n${transcript}` : '');
 
         try {
-            const result = await generateRaw({ prompt, trimNames: false });
+            const result = await callSummarisationLLM(prompt);
             let cleaned = (result || '').trim();
             if (cleaned.startsWith(prompt.trim())) {
                 cleaned = cleaned.substring(prompt.trim().length).trim();
