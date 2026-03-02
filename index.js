@@ -10,7 +10,7 @@ import {
     reloadCurrentChat,
 } from '../../../../script.js';
 import { eventSource, event_types } from '../../../../scripts/events.js';
-import { ConnectionManagerRequestService } from '../../../scripts/extensions/shared.js';
+import { ConnectionManagerRequestService } from '../../shared.js';
 
 const extensionName = 'SillyTavern-SceneSummariser';
 const settingsKey = extensionName;
