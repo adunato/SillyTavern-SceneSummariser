@@ -47,13 +47,26 @@ const defaultSettings = {
     summaryHistoryDepth: 0, // 0 = all
     // Memory extraction (§2)
     memoryExtractionEnabled: true,
-    memoryPrompt: `Summarize the following scene in {{words}} words or less.
+    memoryPrompt: `You are a context manager. First, summarize the following scene in {{words}} words or less, capturing the narrative flow.
 
 ===MESSAGES===
 {{last_messages}}
 ===END===
 
-Then extract memorable facts as a bullet list. Each bullet is one specific, atomic fact — a thing that happened, a relationship state, an item obtained, or a detail revealed. Write in past tense. Use character names, not pronouns.
+Then, extract the most significant facts, events, and developments worth remembering long-term as a bullet list.
+
+INSTRUCTIONS FOR MEMORIES:
+1. Extract only NEW facts, relationship changes, or significant character developments.
+2. Write in past tense, third person. Always refer to characters by name, not "she/he/they". Do NOT quote dialogue verbatim.
+3. Write about WHAT HAPPENED, not about the conversation itself. Never write "she told him about X" — instead write the actual fact: "X happened".
+4. Start the first bullet with a topic tag: "- [CharacterA, CharacterB — short description]". ALWAYS include the main characters first.
+5. HARD LIMIT: No more than 5 bullet points. Keep only the most significant outcomes.
+
+DO NOT EXTRACT AS MEMORIES:
+- Step-by-step accounts of what happened (summarize outcomes, not processes).
+- Individual actions, movements, or temporary physical states (e.g. "leaned against him", "walked to the door").
+- Scene-setting details (room descriptions, weather, clothing).
+- Paraphrased dialogue or conversation filler.
 
 Output format — use these exact tags, nothing else:
 
@@ -62,12 +75,12 @@ Output format — use these exact tags, nothing else:
 </summary>
 
 <memories>
-- [CharacterName, OtherName — short topic label]
+- [CharacterA, CharacterB — short topic label]
 - [fact 1]
 - [fact 2]
 </memories>
 
-If there are no facts worth remembering beyond the summary itself, omit the <memories> block entirely.`,
+If there are no lasting facts worth remembering beyond the summary itself, omit the <memories> block entirely.`,
     maxMemories: 0, // 0 = unlimited
 };
 
