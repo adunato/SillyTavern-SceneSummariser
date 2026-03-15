@@ -851,10 +851,18 @@ async function handleSnapshotAction(action, snapshotId, chatState, container) {
 
     if (action === 'delete') {
         if (confirm(`Delete "${snap.title || 'this snapshot'}"?`)) {
-            // Remove snapshot from state
+            const titleToDelete = snap.title;
+
+            // 1. Remove snapshot from state
             chatState.snapshots.splice(snapIndex, 1);
             
-            // Re-calculate lastSummarisedIndex
+            // 2. Remove associated memories from state
+            const hadMemories = chatState.memories?.length > 0;
+            if (hadMemories) {
+                chatState.memories = chatState.memories.filter(m => m.chatLabel !== titleToDelete);
+            }
+            
+            // 3. Re-calculate lastSummarisedIndex
             if (chatState.snapshots.length > 0) {
                 const latest = chatState.snapshots[chatState.snapshots.length - 1];
                 chatState.lastSummarisedIndex = latest.toIndex || 0;
@@ -862,8 +870,18 @@ async function handleSnapshotAction(action, snapshotId, chatState, container) {
                 chatState.lastSummarisedIndex = 0;
             }
 
-            // Clean up chat marker if it exists
+            // 4. Clean up Data Bank if memories were removed
             const ctx = getContext();
+            const avatar = ctx?.characters?.[ctx?.characterId]?.avatar
+                || (typeof characters !== 'undefined' ? characters[ctx?.characterId]?.avatar : undefined);
+            
+            if (avatar && hadMemories) {
+                const fileName = getSSMemoryFileName(getActiveChatId());
+                await writeSSMemoriesFile(avatar, fileName, chatState.memories);
+                renderMemoriesList(container, chatState);
+            }
+
+            // 5. Clean up chat marker if it exists
             const fullChat = ctx?.chat || [];
             let markerRemoved = false;
             for (let i = fullChat.length - 1; i >= 0; i--) {
@@ -881,7 +899,7 @@ async function handleSnapshotAction(action, snapshotId, chatState, container) {
                 if (typeof reloadCurrentChat === 'function') await reloadCurrentChat();
             }
 
-            logDebug('log', `Deleted snapshot ${snapshotId}. Reset lastSummarisedIndex to ${chatState.lastSummarisedIndex}`);
+            logDebug('log', `Deleted snapshot ${snapshotId} and its memories. Reset lastSummarisedIndex to ${chatState.lastSummarisedIndex}`);
         }
     } else if (action === 'copy') {
         try {
@@ -1599,6 +1617,7 @@ async function onBatchSummariseClick() {
                     const newMemories = bullets.map(text => ({
                         id: ++chatState.memoryCounter,
                         text,
+                        chatLabel: sceneLabel,
                         extractedAt: batchToIndex,
                         createdAt: Date.now(),
                         source: 'extracted',
