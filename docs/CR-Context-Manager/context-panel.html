@@ -1,0 +1,1029 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Context Panel — ST Extension</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #0f0f11;
+    --bg2:       #161619;
+    --bg3:       #1e1e23;
+    --bg4:       #26262e;
+    --border:    #2e2e38;
+    --border2:   #3a3a48;
+    --text:      #c8c8d4;
+    --text2:     #7a7a90;
+    --text3:     #4a4a5e;
+    --accent:    #7c6af7;
+    --accent2:   #5a4fd4;
+    --green:     #4ade80;
+    --amber:     #fbbf24;
+    --red:       #f87171;
+    --cyan:      #22d3ee;
+    --radius:    4px;
+    --mono:      'IBM Plex Mono', monospace;
+    --sans:      'IBM Plex Sans', sans-serif;
+  }
+
+  body {
+    background: #08080a;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 40px 20px;
+    min-height: 100vh;
+    font-family: var(--sans);
+    color: var(--text);
+    gap: 24px;
+  }
+
+  /* ── PANEL SHELL ── */
+  .panel {
+    width: 340px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.6);
+  }
+
+  .panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .panel-title {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text2);
+  }
+
+  .panel-title span {
+    color: var(--accent);
+  }
+
+  .header-actions {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+
+  /* ── BUTTONS ── */
+  .btn {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    border: 1px solid var(--border2);
+    background: var(--bg3);
+    color: var(--text2);
+    padding: 4px 9px;
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: all 0.12s;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    white-space: nowrap;
+  }
+  .btn:hover { background: var(--bg4); color: var(--text); border-color: var(--border2); }
+
+  .btn-accent {
+    background: var(--accent2);
+    border-color: var(--accent);
+    color: #fff;
+  }
+  .btn-accent:hover { background: var(--accent); }
+
+  .btn-ghost {
+    background: transparent;
+    border-color: transparent;
+    color: var(--text3);
+    padding: 4px 6px;
+  }
+  .btn-ghost:hover { color: var(--text); background: var(--bg3); border-color: transparent; }
+
+  .btn-danger:hover { border-color: var(--red); color: var(--red); background: rgba(248,113,113,0.08); }
+
+  /* ── SECTION ── */
+  .section {
+    border-bottom: 1px solid var(--border);
+  }
+
+  .section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 14px;
+    cursor: pointer;
+    user-select: none;
+    background: var(--bg2);
+  }
+  .section-header:hover { background: var(--bg3); }
+
+  .section-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text2);
+  }
+
+  .section-label .dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .dot-green  { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .dot-amber  { background: var(--amber); box-shadow: 0 0 6px var(--amber); }
+  .dot-purple { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+
+  .section-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .badge {
+    font-family: var(--mono);
+    font-size: 9px;
+    padding: 2px 6px;
+    border-radius: 2px;
+    background: var(--bg4);
+    color: var(--text3);
+    border: 1px solid var(--border);
+  }
+  .badge-warn { background: rgba(251,191,36,0.1); color: var(--amber); border-color: rgba(251,191,36,0.3); }
+  .badge-active { background: rgba(124,106,247,0.12); color: var(--accent); border-color: rgba(124,106,247,0.3); }
+
+  .chevron {
+    font-size: 9px;
+    color: var(--text3);
+    transition: transform 0.15s;
+  }
+  .collapsed .chevron { transform: rotate(-90deg); }
+
+  .section-body {
+    overflow: hidden;
+  }
+  .section-body.collapsed { display: none; }
+
+  /* ── TOKEN BAR ── */
+  .token-bar-wrap {
+    padding: 8px 14px;
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .token-label {
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--text3);
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .token-bar {
+    flex: 1;
+    height: 4px;
+    background: var(--bg4);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .token-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent2), var(--accent));
+    border-radius: 2px;
+    transition: width 0.3s;
+  }
+  .token-count {
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--text2);
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  /* ── CONTEXT ENTRIES ── */
+  .entry-list {
+    padding: 6px 0;
+  }
+
+  .entry {
+    display: flex;
+    align-items: flex-start;
+    gap: 0;
+    padding: 5px 14px;
+    transition: background 0.1s;
+    position: relative;
+  }
+  .entry:hover { background: var(--bg3); }
+  .entry:hover .entry-actions { opacity: 1; }
+
+  .entry-type-bar {
+    width: 2px;
+    align-self: stretch;
+    border-radius: 1px;
+    margin-right: 10px;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+  .type-scene  { background: var(--cyan); }
+  .type-memory { background: var(--accent); }
+  .type-pinned { background: var(--amber); }
+
+  .entry-content {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .entry-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 2px;
+  }
+
+  .entry-kind {
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--text3);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .entry-kind.scene  { color: var(--cyan); opacity: 0.7; }
+  .entry-kind.memory { color: var(--accent); opacity: 0.7; }
+  .entry-kind.pinned { color: var(--amber); opacity: 0.7; }
+
+  .entry-pin-icon {
+    font-size: 9px;
+    color: var(--amber);
+    opacity: 0.6;
+  }
+
+  .entry-text {
+    font-size: 11.5px;
+    font-weight: 300;
+    color: var(--text);
+    line-height: 1.5;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .entry-range {
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--text3);
+    margin-top: 1px;
+  }
+
+  .entry-actions {
+    display: flex;
+    gap: 2px;
+    opacity: 0;
+    transition: opacity 0.1s;
+    flex-shrink: 0;
+    margin-left: 6px;
+    align-self: center;
+  }
+
+  /* ── KNOWLEDGE STORE ENTRIES ── */
+  .store-entry {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    padding: 5px 14px;
+    transition: background 0.1s;
+  }
+  .store-entry:hover { background: var(--bg3); }
+  .store-entry:hover .store-actions { opacity: 1; }
+
+  .store-entry-bar {
+    width: 2px;
+    height: 28px;
+    border-radius: 1px;
+    margin-right: 10px;
+    flex-shrink: 0;
+  }
+
+  .store-content {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .store-text {
+    font-size: 11.5px;
+    font-weight: 300;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .store-sub {
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--text3);
+    margin-top: 1px;
+  }
+
+  .store-actions {
+    display: flex;
+    gap: 2px;
+    opacity: 0;
+    transition: opacity 0.1s;
+    flex-shrink: 0;
+    margin-left: 6px;
+  }
+
+  /* ── NOTICE ── */
+  .notice {
+    margin: 6px 14px;
+    padding: 7px 10px;
+    background: rgba(251,191,36,0.07);
+    border: 1px solid rgba(251,191,36,0.2);
+    border-radius: var(--radius);
+    font-size: 11px;
+    color: var(--amber);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .notice .notice-icon { flex-shrink: 0; font-size: 11px; }
+  .notice-btn {
+    margin-left: auto;
+    font-family: var(--mono);
+    font-size: 9px;
+    padding: 3px 7px;
+    background: rgba(251,191,36,0.12);
+    border: 1px solid rgba(251,191,36,0.3);
+    color: var(--amber);
+    border-radius: var(--radius);
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .notice-btn:hover { background: rgba(251,191,36,0.2); }
+
+  /* ── SEARCH AREA ── */
+  .search-area {
+    padding: 8px 14px;
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .search-row {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+
+  .search-input {
+    flex: 1;
+    background: var(--bg3);
+    border: 1px solid var(--border2);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 12px;
+    font-weight: 300;
+    padding: 5px 9px;
+    border-radius: var(--radius);
+    outline: none;
+    transition: border-color 0.12s;
+  }
+  .search-input::placeholder { color: var(--text3); }
+  .search-input:focus { border-color: var(--accent); }
+
+  .search-mode {
+    display: flex;
+    gap: 0;
+    border: 1px solid var(--border2);
+    border-radius: var(--radius);
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+  .mode-btn {
+    font-family: var(--mono);
+    font-size: 9px;
+    padding: 5px 8px;
+    background: var(--bg3);
+    color: var(--text3);
+    border: none;
+    cursor: pointer;
+    transition: all 0.1s;
+    letter-spacing: 0.05em;
+  }
+  .mode-btn.active { background: var(--bg4); color: var(--text); }
+  .mode-btn:hover:not(.active) { color: var(--text2); }
+
+  /* ── SEARCH RESULTS ── */
+  .search-results {
+    margin-top: 8px;
+  }
+
+  .result-item {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    padding: 5px 0;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    transition: background 0.1s;
+    border-radius: var(--radius);
+    padding: 5px 6px;
+  }
+  .result-item:hover { background: var(--bg3); }
+  .result-item:last-child { border-bottom: none; }
+
+  .result-check {
+    width: 14px; height: 14px;
+    border: 1px solid var(--border2);
+    border-radius: 2px;
+    margin-right: 8px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 9px;
+    color: var(--accent);
+    background: transparent;
+    transition: all 0.1s;
+  }
+  .result-item.checked .result-check {
+    background: var(--accent2);
+    border-color: var(--accent);
+  }
+
+  .result-bar {
+    width: 2px;
+    height: 22px;
+    border-radius: 1px;
+    margin-right: 8px;
+    flex-shrink: 0;
+  }
+
+  .result-text {
+    font-size: 11.5px;
+    font-weight: 300;
+    color: var(--text);
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .result-score {
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--text3);
+    margin-left: 8px;
+    flex-shrink: 0;
+  }
+
+  .search-footer {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 6px;
+  }
+
+  /* ── FOOTER ── */
+  .panel-footer {
+    padding: 8px 14px;
+    background: var(--bg2);
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    flex-shrink: 0;
+  }
+
+  .footer-spacer { flex: 1; }
+
+  /* ── DIVIDER ── */
+  .divider {
+    height: 1px;
+    background: var(--border);
+    margin: 0;
+  }
+
+  /* ── EMPTY STATE ── */
+  .empty {
+    padding: 16px 14px;
+    font-size: 11px;
+    color: var(--text3);
+    font-style: italic;
+    text-align: center;
+  }
+
+  /* ── TABS (for second panel demo) ── */
+  .tabs {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg2);
+    padding: 0 14px;
+  }
+  .tab {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text3);
+    padding: 9px 12px 8px;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.12s;
+    margin-bottom: -1px;
+  }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab:hover:not(.active) { color: var(--text2); }
+
+  /* ── SCROLLABLE ── */
+  .scroll-area {
+    overflow-y: auto;
+    max-height: 420px;
+  }
+  .scroll-area::-webkit-scrollbar { width: 4px; }
+  .scroll-area::-webkit-scrollbar-track { background: transparent; }
+  .scroll-area::-webkit-scrollbar-thumb { background: var(--bg4); border-radius: 2px; }
+  .scroll-area::-webkit-scrollbar-thumb:hover { background: var(--border2); }
+
+  /* ── DEMO LABEL ── */
+  .demo-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text3);
+    text-align: center;
+    margin-bottom: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .demo-col { display: flex; flex-direction: column; gap: 0; }
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════
+     PANEL 1 — ACTIVE CONTEXT VIEW
+══════════════════════════════════════════ -->
+<div class="demo-col">
+  <div class="demo-label">Active Context</div>
+  <div class="panel">
+
+    <div class="panel-header">
+      <span class="panel-title"><span>//</span> Context</span>
+      <div class="header-actions">
+        <button class="btn btn-ghost" title="Rebuild from scope">↺ Rebuild</button>
+        <button class="btn btn-accent">↻ Update</button>
+      </div>
+    </div>
+
+    <!-- Token budget -->
+    <div class="token-bar-wrap">
+      <span class="token-label">tokens</span>
+      <div class="token-bar"><div class="token-fill" style="width:68%"></div></div>
+      <span class="token-count">1 360 / 2 000</span>
+    </div>
+
+    <div class="scroll-area">
+
+      <!-- ── SCENES SECTION ── -->
+      <div class="section">
+        <div class="section-header" onclick="toggleSection(this)">
+          <div class="section-label">
+            <span class="dot dot-purple"></span>
+            Scenes
+          </div>
+          <div class="section-meta">
+            <span class="badge badge-active">3 injected</span>
+            <span class="chevron">▾</span>
+          </div>
+        </div>
+        <div class="section-body">
+          <div class="entry-list">
+
+            <div class="entry">
+              <div class="entry-type-bar type-pinned"></div>
+              <div class="entry-content">
+                <div class="entry-meta">
+                  <span class="entry-kind pinned">scene</span>
+                  <span class="entry-pin-icon">⚑</span>
+                </div>
+                <div class="entry-text">The ambush at Koval's warehouse — Elena injured</div>
+                <div class="entry-range">msgs 12–19</div>
+              </div>
+              <div class="entry-actions">
+                <button class="btn btn-ghost btn-danger" title="Remove from context">✕</button>
+              </div>
+            </div>
+
+            <div class="entry">
+              <div class="entry-type-bar type-scene"></div>
+              <div class="entry-content">
+                <div class="entry-meta">
+                  <span class="entry-kind scene">scene</span>
+                </div>
+                <div class="entry-text">Negotiation with the harbor master fails</div>
+                <div class="entry-range">msgs 31–38</div>
+              </div>
+              <div class="entry-actions">
+                <button class="btn btn-ghost" title="Pin — keep across rebuilds">⚑</button>
+                <button class="btn btn-ghost btn-danger" title="Remove from context">✕</button>
+              </div>
+            </div>
+
+            <div class="entry">
+              <div class="entry-type-bar type-scene"></div>
+              <div class="entry-content">
+                <div class="entry-meta">
+                  <span class="entry-kind scene">scene</span>
+                </div>
+                <div class="entry-text">Escape through the canal district, split up</div>
+                <div class="entry-range">msgs 44–51 · current</div>
+              </div>
+              <div class="entry-actions">
+                <button class="btn btn-ghost" title="Pin — keep across rebuilds">⚑</button>
+                <button class="btn btn-ghost btn-danger" title="Remove">✕</button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+      <!-- ── MEMORIES SECTION ── -->
+      <div class="section">
+        <div class="section-header" onclick="toggleSection(this)">
+          <div class="section-label">
+            <span class="dot dot-green"></span>
+            Memories
+          </div>
+          <div class="section-meta">
+            <span class="badge badge-active">4 injected</span>
+            <span class="chevron">▾</span>
+          </div>
+        </div>
+        <div class="section-body">
+          <div class="entry-list">
+
+            <div class="entry">
+              <div class="entry-type-bar type-pinned"></div>
+              <div class="entry-content">
+                <div class="entry-meta">
+                  <span class="entry-kind pinned">memory</span>
+                  <span class="entry-pin-icon">⚑</span>
+                </div>
+                <div class="entry-text">Elena is afraid of water since the river incident</div>
+                <div class="entry-range">extracted msg 7</div>
+              </div>
+              <div class="entry-actions">
+                <button class="btn btn-ghost btn-danger" title="Remove">✕</button>
+              </div>
+            </div>
+
+            <div class="entry">
+              <div class="entry-type-bar type-memory"></div>
+              <div class="entry-content">
+                <div class="entry-meta">
+                  <span class="entry-kind memory">memory</span>
+                </div>
+                <div class="entry-text">Player carries a forged harbor pass</div>
+                <div class="entry-range">extracted msg 29</div>
+              </div>
+              <div class="entry-actions">
+                <button class="btn btn-ghost" title="Pin">⚑</button>
+                <button class="btn btn-ghost btn-danger" title="Remove">✕</button>
+              </div>
+            </div>
+
+            <div class="entry">
+              <div class="entry-type-bar type-memory"></div>
+              <div class="entry-content">
+                <div class="entry-meta">
+                  <span class="entry-kind memory">memory</span>
+                </div>
+                <div class="entry-text">Koval has connections with the Guild of Ledgers</div>
+                <div class="entry-range">extracted msg 14</div>
+              </div>
+              <div class="entry-actions">
+                <button class="btn btn-ghost" title="Pin">⚑</button>
+                <button class="btn btn-ghost btn-danger" title="Remove">✕</button>
+              </div>
+            </div>
+
+            <div class="entry">
+              <div class="entry-type-bar type-memory"></div>
+              <div class="entry-content">
+                <div class="entry-meta">
+                  <span class="entry-kind memory">memory</span>
+                </div>
+                <div class="entry-text">Safe house is at the old mill, north road</div>
+                <div class="entry-range">extracted msg 33</div>
+              </div>
+              <div class="entry-actions">
+                <button class="btn btn-ghost" title="Pin">⚑</button>
+                <button class="btn btn-ghost btn-danger" title="Remove">✕</button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+      <!-- Unsummarized notice -->
+      <div class="notice">
+        <span class="notice-icon">⚠</span>
+        <span>9 messages not yet summarized</span>
+        <button class="notice-btn">Update now</button>
+      </div>
+
+    </div><!-- /scroll-area -->
+
+    <!-- Footer -->
+    <div class="panel-footer">
+      <button class="btn" onclick="showPicker()">＋ Browse &amp; add</button>
+      <div class="footer-spacer"></div>
+      <button class="btn btn-ghost" style="color:var(--text3);font-size:9px;">clear all</button>
+    </div>
+
+  </div><!-- /panel -->
+</div>
+
+<!-- ══════════════════════════════════════════
+     PANEL 2 — BROWSER / PICKER
+     (opened via "Browse & add" button)
+══════════════════════════════════════════ -->
+<div class="demo-col">
+  <div class="demo-label">Browse &amp; Add (picker)</div>
+  <div class="panel">
+
+    <div class="panel-header">
+      <span class="panel-title"><span>//</span> Knowledge Store</span>
+      <button class="btn btn-ghost" style="font-size:11px;">✕</button>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs">
+      <div class="tab active" onclick="switchTab(this,'scenes')">Scenes</div>
+      <div class="tab" onclick="switchTab(this,'memories')">Memories</div>
+    </div>
+
+    <!-- Search -->
+    <div class="search-area">
+      <div class="search-row">
+        <input class="search-input" placeholder="Filter or describe a topic…" id="searchInput" oninput="handleSearch(this.value)" />
+        <div class="search-mode">
+          <button class="mode-btn active" id="modeText" onclick="setMode('text',this)">text</button>
+          <button class="mode-btn" id="modeSemantic" onclick="setMode('semantic',this)">ai</button>
+        </div>
+        <button class="btn" onclick="runSearch()" id="searchBtn">Go</button>
+      </div>
+    </div>
+
+    <!-- Results list -->
+    <div class="scroll-area" style="max-height:340px;">
+      <div id="storeList">
+
+        <!-- SCENES TAB -->
+        <div id="tab-scenes">
+          <div class="entry-list" style="padding:6px 0">
+
+            <div class="store-entry result-item" onclick="toggleCheck(this)">
+              <div class="result-check"></div>
+              <div class="store-entry-bar type-scene result-bar"></div>
+              <div class="store-content result-text">
+                The meeting with Varro at the docks
+                <div class="store-sub">msgs 1–6</div>
+              </div>
+              <span class="result-score">—</span>
+            </div>
+
+            <div class="store-entry result-item" onclick="toggleCheck(this)">
+              <div class="result-check"></div>
+              <div class="store-entry-bar type-scene result-bar"></div>
+              <div class="store-content result-text">
+                The ambush at Koval's warehouse
+                <div class="store-sub">msgs 12–19 · in context</div>
+              </div>
+              <span class="result-score">—</span>
+            </div>
+
+            <div class="store-entry result-item" onclick="toggleCheck(this)">
+              <div class="result-check"></div>
+              <div class="store-entry-bar type-scene result-bar"></div>
+              <div class="store-content result-text">
+                Elena treated at the physician's house
+                <div class="store-sub">msgs 20–27</div>
+              </div>
+              <span class="result-score">—</span>
+            </div>
+
+            <div class="store-entry result-item" onclick="toggleCheck(this)">
+              <div class="result-check"></div>
+              <div class="store-entry-bar type-scene result-bar"></div>
+              <div class="store-content result-text">
+                Negotiation with the harbor master fails
+                <div class="store-sub">msgs 31–38 · in context</div>
+              </div>
+              <span class="result-score">—</span>
+            </div>
+
+            <div class="store-entry result-item" onclick="toggleCheck(this)">
+              <div class="result-check"></div>
+              <div class="store-entry-bar type-scene result-bar"></div>
+              <div class="store-content result-text">
+                Escape through the canal district
+                <div class="store-sub">msgs 44–51 · in context</div>
+              </div>
+              <span class="result-score">—</span>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- MEMORIES TAB (hidden initially) -->
+        <div id="tab-memories" style="display:none">
+          <div class="entry-list" style="padding:6px 0">
+
+            <div class="store-entry result-item" onclick="toggleCheck(this)">
+              <div class="result-check"></div>
+              <div class="store-entry-bar type-memory result-bar"></div>
+              <div class="store-content result-text">
+                Elena is afraid of water since the river incident
+                <div class="store-sub">extracted msg 7 · in context</div>
+              </div>
+              <span class="result-score">—</span>
+            </div>
+
+            <div class="store-entry result-item" onclick="toggleCheck(this)">
+              <div class="result-check"></div>
+              <div class="store-entry-bar type-memory result-bar"></div>
+              <div class="store-content result-text">
+                Varro owes the player a debt from Thessmark
+                <div class="store-sub">extracted msg 4</div>
+              </div>
+              <span class="result-score">—</span>
+            </div>
+
+            <div class="store-entry result-item" onclick="toggleCheck(this)">
+              <div class="result-check"></div>
+              <div class="store-entry-bar type-memory result-bar"></div>
+              <div class="store-content result-text">
+                Koval has connections with the Guild of Ledgers
+                <div class="store-sub">extracted msg 14 · in context</div>
+              </div>
+              <span class="result-score">—</span>
+            </div>
+
+            <div class="store-entry result-item" onclick="toggleCheck(this)">
+              <div class="result-check"></div>
+              <div class="store-entry-bar type-memory result-bar"></div>
+              <div class="store-content result-text">
+                Player carries a forged harbor pass
+                <div class="store-sub">extracted msg 29 · in context</div>
+              </div>
+              <span class="result-score">—</span>
+            </div>
+
+            <div class="store-entry result-item" onclick="toggleCheck(this)">
+              <div class="result-check"></div>
+              <div class="store-entry-bar type-memory result-bar"></div>
+              <div class="store-content result-text">
+                Safe house is at the old mill, north road
+                <div class="store-sub">extracted msg 33 · in context</div>
+              </div>
+              <span class="result-score">—</span>
+            </div>
+
+            <div class="store-entry result-item" onclick="toggleCheck(this)">
+              <div class="result-check"></div>
+              <div class="store-entry-bar type-memory result-bar"></div>
+              <div class="store-content result-text">
+                Elena's sister is held by the Guild as leverage
+                <div class="store-sub">extracted msg 41</div>
+              </div>
+              <span class="result-score">—</span>
+            </div>
+
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="panel-footer">
+      <span style="font-family:var(--mono);font-size:9px;color:var(--text3)" id="selectedCount">0 selected</span>
+      <div class="footer-spacer"></div>
+      <button class="btn btn-accent" onclick="addSelected()" id="addBtn" disabled style="opacity:0.4">Add to context</button>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  // Section collapse
+  function toggleSection(header) {
+    const body = header.nextElementSibling;
+    body.classList.toggle('collapsed');
+    header.classList.toggle('collapsed');
+  }
+
+  // Tabs
+  function switchTab(el, tab) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    el.classList.add('active');
+    document.getElementById('tab-scenes').style.display = tab === 'scenes' ? '' : 'none';
+    document.getElementById('tab-memories').style.display = tab === 'memories' ? '' : 'none';
+    updateSelected();
+  }
+
+  // Search mode
+  function setMode(mode, el) {
+    document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+    el.classList.add('active');
+    const btn = document.getElementById('searchBtn');
+    btn.textContent = mode === 'semantic' ? 'Search' : 'Go';
+  }
+
+  // Check/uncheck result items
+  function toggleCheck(el) {
+    el.classList.toggle('checked');
+    if (el.classList.contains('checked')) {
+      el.querySelector('.result-check').textContent = '✓';
+    } else {
+      el.querySelector('.result-check').textContent = '';
+    }
+    updateSelected();
+  }
+
+  function updateSelected() {
+    const count = document.querySelectorAll('.result-item.checked').length;
+    document.getElementById('selectedCount').textContent = count + ' selected';
+    const btn = document.getElementById('addBtn');
+    btn.disabled = count === 0;
+    btn.style.opacity = count === 0 ? '0.4' : '1';
+  }
+
+  // Filter
+  function handleSearch(val) {
+    const items = document.querySelectorAll('#tab-scenes .result-item, #tab-memories .result-item');
+    items.forEach(item => {
+      const text = item.querySelector('.result-text').textContent.toLowerCase();
+      item.style.display = (!val || text.includes(val.toLowerCase())) ? '' : 'none';
+    });
+  }
+
+  function runSearch() {
+    const mode = document.querySelector('.mode-btn.active').id;
+    if (mode === 'modeSemantic') {
+      // Simulate AI search results with scores
+      const val = document.getElementById('searchInput').value;
+      if (!val) return;
+      const items = document.querySelectorAll('#tab-memories .result-item');
+      const scores = [0.91, 0.74, 0.68, 0.52, 0.31, 0.12];
+      items.forEach((item, i) => {
+        item.style.display = '';
+        const score = scores[i] || 0.1;
+        item.querySelector('.result-score').textContent = score.toFixed(2);
+        item.style.opacity = score > 0.4 ? '1' : '0.45';
+      });
+    }
+  }
+
+  // Add selected to context (stub)
+  function addSelected() {
+    const checked = document.querySelectorAll('.result-item.checked');
+    checked.forEach(item => item.classList.remove('checked'));
+    updateSelected();
+    // In real impl: push entries to active context panel
+    alert(checked.length + ' entries added to active context.');
+  }
+
+  // Picker trigger from panel 1
+  function showPicker() {
+    document.querySelector('.demo-col:nth-child(2)').style.opacity = '1';
+  }
+</script>
+</body>
+</html>
