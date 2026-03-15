@@ -12,6 +12,12 @@ import {
 import { eventSource, event_types } from '../../../../scripts/events.js';
 import { ConnectionManagerRequestService } from '../../shared.js';
 import { POPUP_RESULT, POPUP_TYPE, Popup } from '../../../popup.js';
+import {
+    uploadFileAttachment,
+    getFileAttachment,
+    deleteFileFromServer,
+} from '../../../../scripts/chats.js';
+import { getStringHash, convertTextToBase64 } from '../../../../scripts/utils.js';
 
 const extensionName = 'SillyTavern-SceneSummariser';
 const settingsKey = extensionName;
@@ -39,6 +45,30 @@ const defaultSettings = {
     connectionProfileId: '',
     manualSummaryLimit: 0, // 0 = unlimited
     summaryHistoryDepth: 0, // 0 = all
+    // Memory extraction (§2)
+    memoryExtractionEnabled: true,
+    memoryPrompt: `Summarize the following scene in {{words}} words or less.
+
+===MESSAGES===
+{{last_messages}}
+===END===
+
+Then extract memorable facts as a bullet list. Each bullet is one specific, atomic fact — a thing that happened, a relationship state, an item obtained, or a detail revealed. Write in past tense. Use character names, not pronouns.
+
+Output format — use these exact tags, nothing else:
+
+<summary>
+[scene summary here]
+</summary>
+
+<memories>
+- [CharacterName, OtherName — short topic label]
+- [fact 1]
+- [fact 2]
+</memories>
+
+If there are no facts worth remembering beyond the summary itself, omit the <memories> block entirely.`,
+    maxMemories: 0, // 0 = unlimited
 };
 
 const chatStateDefaults = {
@@ -48,6 +78,9 @@ const chatStateDefaults = {
     sceneBreakMarkerId: '',
     sceneBreakMesId: null,
     snapshots: [],
+    // Memory extraction (§2)
+    memories: [],
+    memoryCounter: 0,
 };
 
 const legacyStateKeys = Object.keys(chatStateDefaults);
@@ -58,6 +91,153 @@ let currentAbortController = null;
 let debugMessages = [];
 let settingsContainer = null;
 
+
+// ============ Memory Extraction — Data Bank Helpers (§2) ============
+
+/**
+ * Returns the Data Bank filename used to store extracted memories for a given chat.
+ * @param {string} chatId
+ * @returns {string}
+ */
+function getSSMemoryFileName(chatId) {
+    const safeChatId = String(chatId || 'default').replace(/[^a-zA-Z0-9_-]/g, '_');
+    return `ss-memories-${safeChatId}.md`;
+}
+
+/**
+ * Finds the attachment record for a SceneSummariser memory file in a character's Data Bank.
+ * @param {string} avatar
+ * @param {string} fileName
+ * @returns {object|null}
+ */
+function findSSMemoryAttachment(avatar, fileName) {
+    const attachments = extension_settings.character_attachments?.[avatar];
+    if (!Array.isArray(attachments)) return null;
+    return attachments.find(a => a.name === fileName) || null;
+}
+
+/**
+ * Reads the content of a SceneSummariser memory file from the Data Bank.
+ * @param {string} avatar
+ * @param {string} fileName
+ * @returns {Promise<string>}
+ */
+async function readSSMemoriesFile(avatar, fileName) {
+    const attachment = findSSMemoryAttachment(avatar, fileName);
+    if (!attachment) return '';
+    try {
+        return (await getFileAttachment(attachment.url)) || '';
+    } catch (err) {
+        logDebug('error', 'Failed to read memory file', err?.message || err);
+        return '';
+    }
+}
+
+/**
+ * Appends a new <memory> block to the Data Bank file, rewriting the file via uploadFileAttachment.
+ * Mirrors CharMemory's writeMemoriesForCharacter pattern.
+ * @param {string} avatar
+ * @param {string} fileName
+ * @param {string} newBlockMarkdown
+ */
+async function appendSSMemoriesBlock(avatar, fileName, newBlockMarkdown) {
+    if (!extension_settings.character_attachments) extension_settings.character_attachments = {};
+    if (!Array.isArray(extension_settings.character_attachments[avatar])) {
+        extension_settings.character_attachments[avatar] = [];
+    }
+
+    const existing = await readSSMemoriesFile(avatar, fileName);
+    const newContent = existing
+        ? `${existing.trimEnd()}\n\n${newBlockMarkdown}`
+        : newBlockMarkdown;
+
+    // Delete old file if present
+    const oldAttachment = findSSMemoryAttachment(avatar, fileName);
+    if (oldAttachment) {
+        try { await deleteFileFromServer(oldAttachment.url, true); } catch (_) { /* ignore */ }
+        extension_settings.character_attachments[avatar] =
+            extension_settings.character_attachments[avatar].filter(a => a.url !== oldAttachment.url);
+    }
+
+    // Upload new file
+    const base64Data = convertTextToBase64(newContent);
+    const slug = getStringHash(fileName);
+    const uniqueFileName = `${Date.now()}_${slug}.txt`;
+    const fileUrl = await uploadFileAttachment(uniqueFileName, base64Data);
+    if (!fileUrl) {
+        logDebug('error', 'appendSSMemoriesBlock: uploadFileAttachment returned no URL');
+        return;
+    }
+
+    extension_settings.character_attachments[avatar].push({
+        url: fileUrl,
+        size: newContent.length,
+        name: fileName,
+        created: Date.now(),
+    });
+    saveSettingsDebounced();
+    logDebug('log', `Memory file updated: ${fileName} (${newContent.length} bytes)`);
+}
+
+// ============ Memory Extraction — Response Parser (§2) ============
+
+/**
+ * Parses a combined LLM extraction response into summary text and memory bullet strings.
+ * Falls back to treating the whole response as summaryText when tags are absent.
+ * @param {string} raw Raw LLM response.
+ * @returns {{ summaryText: string, bullets: string[] }}
+ */
+function parseExtractionResponse(raw) {
+    const text = (raw || '').trim();
+    const summaryMatch = text.match(/<summary>([\s\S]*?)<\/summary>/i);
+    const memoriesMatch = text.match(/<memories>([\s\S]*?)<\/memories>/i);
+
+    const summaryText = summaryMatch ? summaryMatch[1].trim() : text;
+
+    const bullets = [];
+    if (memoriesMatch) {
+        for (const line of memoriesMatch[1].split('\n')) {
+            const trimmed = line.trim();
+            if (trimmed.startsWith('- ')) bullets.push(trimmed.slice(2).trim());
+        }
+    }
+    return { summaryText, bullets };
+}
+
+// ============ Memory Extraction — Prompt Builder (§2) ============
+
+/**
+ * Builds the LLM prompt for the current summarisation pass.
+ * When memoryExtractionEnabled is true, uses memoryPrompt (combined template).
+ * When false, falls back to summaryPrompt (legacy behaviour).
+ * @param {string} transcript Chat transcript text.
+ * @param {object} settings Extension settings.
+ * @param {string} previousSummaryText Concatenated previous snapshot texts.
+ * @returns {string}
+ */
+function buildExtractionPrompt(transcript, settings, previousSummaryText) {
+    const words = settings.summaryWords || defaultSettings.summaryWords;
+    const enabled = settings.memoryExtractionEnabled ?? defaultSettings.memoryExtractionEnabled;
+    const template = enabled
+        ? (settings.memoryPrompt || defaultSettings.memoryPrompt)
+        : (settings.summaryPrompt || defaultSettings.summaryPrompt);
+
+    return template
+        .replace(/\{\{words\}\}/g, words)
+        .replace(/\{\{summary\}\}/g, previousSummaryText || '')
+        .replace(/\{\{last_messages\}\}/g, transcript || '(no messages)');
+}
+
+/**
+ * Prunes the oldest memories from chatState.memories[] when maxMemories is set.
+ * @param {object} chatState
+ * @param {object} settings
+ */
+function pruneMemories(chatState, settings) {
+    const max = Number(settings.maxMemories ?? defaultSettings.maxMemories);
+    if (max <= 0) return;
+    while (chatState.memories.length > max) chatState.memories.shift();
+}
 
 function getLatestSnapshot(chatState) {
     if (!chatState?.snapshots?.length) return null;
@@ -852,8 +1032,6 @@ async function onSummariseClick() {
 
     const settings = extension_settings[settingsKey];
     const chatState = getChatState();
-    const words = settings.summaryWords || defaultSettings.summaryWords;
-    const promptTemplate = settings.summaryPrompt || defaultSettings.summaryPrompt;
 
     const historyDepth = Number(settings.summaryHistoryDepth || defaultSettings.summaryHistoryDepth);
     let previousSnapshots = chatState.snapshots || [];
@@ -861,13 +1039,9 @@ async function onSummariseClick() {
         previousSnapshots = previousSnapshots.slice(-historyDepth);
     }
 
-    const allSummaries = previousSnapshots
+    const previousSummaryText = previousSnapshots
         .map(s => `${s.title || 'Scene #' + s.id}: ${s.text}`)
         .join('\n');
-
-    const promptText = promptTemplate
-        .replace('{{words}}', words)
-        .replace('{{summary}}', allSummaries);
 
     // Build chat transcript for context
     const ctx = getContext();
@@ -908,17 +1082,19 @@ async function onSummariseClick() {
         })
         .join('\n');
 
-    const prompt = promptText
-        .replace('{{last_messages}}', transcript || '(no new messages)')
-        + (!promptText.includes('{{last_messages}}') ? `\n\nChat history:\n${transcript}` : '');
+    // Use combined extraction prompt (or legacy summary-only prompt if extraction is disabled)
+    const prompt = buildExtractionPrompt(transcript, settings, previousSummaryText);
 
     try {
-        const result = await callSummarisationLLM(prompt, currentAbortController.signal);
-        let cleaned = (result || '').trim();
+        const rawResult = await callSummarisationLLM(prompt, currentAbortController.signal);
+        // Parse combined response — falls back gracefully to summary-only if tags are absent
+        const { summaryText, bullets } = parseExtractionResponse(rawResult || '');
+        let cleaned = summaryText;
         if (cleaned.startsWith(prompt.trim())) {
             cleaned = cleaned.substring(prompt.trim().length).trim();
         }
         logDebug('log', 'LLM summary result', cleaned);
+        logDebug('log', `Memory bullets extracted: ${bullets.length}`);
 
         const editedText = await showSummaryEditor(cleaned);
         if (editedText === null) {
@@ -927,6 +1103,7 @@ async function onSummariseClick() {
         }
 
         // Update stored snapshot list
+        const words = settings.summaryWords || defaultSettings.summaryWords;
         const nextId = (chatState.summaryCounter ?? 0) + 1;
         const snapshot = {
             id: nextId,
@@ -945,6 +1122,43 @@ async function onSummariseClick() {
         // Do not truncate snapshots here; we want to keep all history for the next summarisation.
         // maxSummaries will be applied during injection via buildSummaryText.
         chatState.lastSummarisedIndex = chat.length;
+
+        // --- Memory Extraction (§2): persist bullets to Data Bank ---
+        const memoryEnabled = settings.memoryExtractionEnabled ?? defaultSettings.memoryExtractionEnabled;
+        if (memoryEnabled && bullets.length > 0) {
+            const avatar = ctx?.characters?.[ctx?.characterId]?.avatar
+                || (typeof characters !== 'undefined' ? characters[ctx?.characterId]?.avatar : undefined);
+
+            if (avatar) {
+                const chatId = getActiveChatId();
+                const fileName = getSSMemoryFileName(chatId);
+
+                // Build <memory> tag block (CharMemory-compatible format)
+                const timestamp = new Date().toISOString().slice(0, 16).replace('T', ' ');
+                const sceneLabel = snapshot.title;
+                const bulletsText = bullets.map(b => `- ${b}`).join('\n');
+                const newBlock = `<memory chat="${sceneLabel}" date="${timestamp}">\n${bulletsText}\n</memory>`;
+
+                await appendSSMemoriesBlock(avatar, fileName, newBlock);
+
+                // Update lightweight in-memory index
+                chatState.memories = chatState.memories || [];
+                const newMemories = bullets.map(text => ({
+                    id: ++chatState.memoryCounter,
+                    text,
+                    extractedAt: chat.length,
+                    createdAt: Date.now(),
+                    source: 'extracted',
+                }));
+                chatState.memories.push(...newMemories);
+                pruneMemories(chatState, settings);
+
+                logDebug('log', `Persisted ${bullets.length} memories for ${sceneLabel}`);
+                toastr.info(`Extracted ${bullets.length} memory ${bullets.length === 1 ? 'fact' : 'facts'} to Data Bank.`, extensionName);
+            } else {
+                logDebug('warn', 'Memory extraction: no character avatar found, skipping Data Bank write');
+            }
+        }
 
         if (settings.insertSceneBreak) {
             await insertSceneBreakMarker(nextId);
@@ -1074,13 +1288,9 @@ async function onBatchSummariseClick() {
             previousSnapshots = previousSnapshots.slice(-historyDepth);
         }
 
-        const allSummariesContext = previousSnapshots
+        const previousSummaryText = previousSnapshots
             .map(s => `${s.title || 'Scene #' + s.id}: ${s.text}`)
             .join('\n');
-
-        const promptText = promptTemplate
-            .replace('{{words}}', words)
-            .replace('{{summary}}', allSummariesContext);
 
         const transcript = batch
             .map(({ msg }) => {
@@ -1089,17 +1299,19 @@ async function onBatchSummariseClick() {
             })
             .join('\n');
 
-        const prompt = promptText
-            .replace('{{last_messages}}', transcript || '(no new messages)')
-            + (!promptText.includes('{{last_messages}}') ? `\n\nChat history:\n${transcript}` : '');
+        // Use combined extraction prompt (or legacy summary-only prompt if extraction is disabled)
+        const prompt = buildExtractionPrompt(transcript, settings, previousSummaryText);
 
         try {
-            const result = await callSummarisationLLM(prompt, currentAbortController.signal);
-            let cleaned = (result || '').trim();
+            const rawResult = await callSummarisationLLM(prompt, currentAbortController.signal);
+            // Parse combined response — falls back gracefully to summary-only if tags are absent
+            const { summaryText, bullets } = parseExtractionResponse(rawResult || '');
+            let cleaned = summaryText;
             if (cleaned.startsWith(prompt.trim())) {
                 cleaned = cleaned.substring(prompt.trim().length).trim();
             }
             logDebug('log', `LLM batch summary result ${i + 1}/${totalBatches}`, cleaned);
+            logDebug('log', `Memory bullets extracted: ${bullets.length}`);
 
             // Update stored snapshot list
             const nextId = (chatState.summaryCounter ?? 0) + 1;
@@ -1122,6 +1334,40 @@ async function onBatchSummariseClick() {
             chatState.summaryCounter = nextId;
             chatState.snapshots.push(snapshot);
             chatState.lastSummarisedIndex = batchToIndex;
+
+            // --- Memory Extraction (§2): persist bullets to Data Bank (silently in batch mode) ---
+            const memoryEnabled = settings.memoryExtractionEnabled ?? defaultSettings.memoryExtractionEnabled;
+            if (memoryEnabled && bullets.length > 0) {
+                const batchCtx = getContext();
+                const avatar = batchCtx?.characters?.[batchCtx?.characterId]?.avatar
+                    || (typeof characters !== 'undefined' ? characters[batchCtx?.characterId]?.avatar : undefined);
+
+                if (avatar) {
+                    const chatId = getActiveChatId();
+                    const fileName = getSSMemoryFileName(chatId);
+                    const timestamp = new Date().toISOString().slice(0, 16).replace('T', ' ');
+                    const sceneLabel = snapshot.title;
+                    const bulletsText = bullets.map(b => `- ${b}`).join('\n');
+                    const newBlock = `<memory chat="${sceneLabel}" date="${timestamp}">\n${bulletsText}\n</memory>`;
+
+                    // Fire-and-forget in batch: don't block the loop, but log errors
+                    appendSSMemoriesBlock(avatar, fileName, newBlock).catch(err => {
+                        logDebug('error', `Batch memory write failed for ${sceneLabel}:`, err?.message || err);
+                    });
+
+                    chatState.memories = chatState.memories || [];
+                    const newMemories = bullets.map(text => ({
+                        id: ++chatState.memoryCounter,
+                        text,
+                        extractedAt: batchToIndex,
+                        createdAt: Date.now(),
+                        source: 'extracted',
+                    }));
+                    chatState.memories.push(...newMemories);
+                    pruneMemories(chatState, settings);
+                    logDebug('log', `Batch: persisted ${bullets.length} memories for ${sceneLabel}`);
+                }
+            }
 
             if (settings.insertSceneBreak) {
                 markersToInsert.push({ index: batchToIndex, id: nextId });
