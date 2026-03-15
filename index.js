@@ -179,6 +179,76 @@ async function appendSSMemoriesBlock(avatar, fileName, newBlockMarkdown) {
     logDebug('log', `Memory file updated: ${fileName} (${newContent.length} bytes)`);
 }
 
+/**
+ * Rebuilds and overwrites the entire Data Bank memory file from the current chatState index.
+ * Used after manual edits or deletions.
+ * @param {string} avatar
+ * @param {string} fileName
+ * @param {object[]} memories List of memory objects from chatState.
+ */
+async function writeSSMemoriesFile(avatar, fileName, memories) {
+    if (!extension_settings.character_attachments) extension_settings.character_attachments = {};
+    if (!Array.isArray(extension_settings.character_attachments[avatar])) {
+        extension_settings.character_attachments[avatar] = [];
+    }
+
+    if (!memories.length) {
+        // If no memories, delete the file
+        const oldAttachment = findSSMemoryAttachment(avatar, fileName);
+        if (oldAttachment) {
+            try { await deleteFileFromServer(oldAttachment.url, true); } catch (_) { /* ignore */ }
+            extension_settings.character_attachments[avatar] =
+                extension_settings.character_attachments[avatar].filter(a => a.url !== oldAttachment.url);
+            saveSettingsDebounced();
+        }
+        return;
+    }
+
+    // Group memories by scene label if possible, or use a default
+    const blocks = [];
+    const grouped = {};
+    for (const m of memories) {
+        const label = m.chatLabel || 'Memory Index';
+        if (!grouped[label]) grouped[label] = [];
+        grouped[label].push(m.text);
+    }
+
+    for (const [label, texts] of Object.entries(grouped)) {
+        const timestamp = new Date().toISOString().slice(0, 16).replace('T', ' ');
+        const bulletsText = texts.map(t => `- ${t}`).join('\n');
+        blocks.push(`<memory chat="${label}" date="${timestamp}">\n${bulletsText}\n</memory>`);
+    }
+
+    const newContent = blocks.join('\n\n');
+
+    // Delete old file
+    const oldAttachment = findSSMemoryAttachment(avatar, fileName);
+    if (oldAttachment) {
+        try { await deleteFileFromServer(oldAttachment.url, true); } catch (_) { /* ignore */ }
+        extension_settings.character_attachments[avatar] =
+            extension_settings.character_attachments[avatar].filter(a => a.url !== oldAttachment.url);
+    }
+
+    // Upload new file
+    const base64Data = convertTextToBase64(newContent);
+    const slug = getStringHash(fileName);
+    const uniqueFileName = `${Date.now()}_${slug}.txt`;
+    const fileUrl = await uploadFileAttachment(uniqueFileName, base64Data);
+    if (!fileUrl) {
+        logDebug('error', 'writeSSMemoriesFile: uploadFileAttachment returned no URL');
+        return;
+    }
+
+    extension_settings.character_attachments[avatar].push({
+        url: fileUrl,
+        size: newContent.length,
+        name: fileName,
+        created: Date.now(),
+    });
+    saveSettingsDebounced();
+    logDebug('log', `Memory file rebuilt: ${fileName} (${newContent.length} bytes)`);
+}
+
 // ============ Memory Extraction — Response Parser (§2) ============
 
 /**
@@ -576,6 +646,7 @@ function bindSettingsUI(container) {
         if (actionEl) {
             const action = actionEl.dataset.ssAction;
             if (action === 'toggle-settings') togglePanel(container, '#ss_settings_panel');
+            if (action === 'toggle-memory') togglePanel(container, '#ss_memory_panel');
             if (action === 'toggle-summary') togglePanel(container, '#ss_summary_panel');
             return;
         }
@@ -600,6 +671,53 @@ function bindSettingsUI(container) {
             if (currentSummary) currentSummary.value = buildSummaryText(chatState, extension_settings[settingsKey]);
             applyInjection();
             saveSettingsDebounced();
+        }
+
+        // Memory actions
+        const memoryBtn = event.target.closest('[data-memory-action]');
+        if (memoryBtn) {
+            const action = memoryBtn.dataset.memoryAction;
+            const id = Number(memoryBtn.dataset.memoryId);
+            const chatState = getChatState();
+            if (action === 'delete') {
+                if (confirm('Delete this memory fact from the Data Bank?')) {
+                    chatState.memories = chatState.memories.filter(m => m.id !== id);
+                    const ctx = getContext();
+                    const avatar = ctx?.characters?.[ctx?.characterId]?.avatar
+                        || (typeof characters !== 'undefined' ? characters[ctx?.characterId]?.avatar : undefined);
+                    if (avatar) {
+                        const fileName = getSSMemoryFileName(getActiveChatId());
+                        await writeSSMemoriesFile(avatar, fileName, chatState.memories);
+                    }
+                    renderMemoriesList(container, chatState);
+                    saveSettingsDebounced();
+                }
+            }
+        }
+    });
+
+    // 2b) Auto-save memory text
+    container.addEventListener('input', (event) => {
+        if (!event.target.classList.contains('ss-memory-text')) return;
+        const id = Number(event.target.dataset.id);
+        const chatState = getChatState();
+        const memory = chatState.memories.find(m => m.id === id);
+        if (memory) {
+            memory.text = event.target.value;
+            saveSettingsDebounced();
+            
+            // Rewrite file on a debounce or after blur to avoid spamming the server
+            // For now, we'll use a simple debounce on the file write
+            clearTimeout(memory.rewriteTimeout);
+            memory.rewriteTimeout = setTimeout(async () => {
+                const ctx = getContext();
+                const avatar = ctx?.characters?.[ctx?.characterId]?.avatar
+                    || (typeof characters !== 'undefined' ? characters[ctx?.characterId]?.avatar : undefined);
+                if (avatar) {
+                    const fileName = getSSMemoryFileName(getActiveChatId());
+                    await writeSSMemoriesFile(avatar, fileName, chatState.memories);
+                }
+            }, 2000);
         }
     });
 
@@ -882,28 +1000,100 @@ async function regenerateSnapshot(snapshot, settings, chatState) {
 }
 
 /**
- * Shows the scene summary popup modal for reviewing and editing the generated summary before saving.
- * @param {string} initialText The generated text.
- * @returns {Promise<string|null>} The edited text, or null if cancelled.
+ * Shows the combined editor popup for reviewing and editing the generated summary and memory bullets.
+ * @param {string} initialSummary AI-generated summary.
+ * @param {string[]} initialBullets AI-extracted memory bullets.
+ * @returns {Promise<{ summary: string, memories: string[] }|null>} Final edited data, or null if cancelled.
  */
-async function showSummaryEditor(initialText) {
+async function showCombinedEditor(initialSummary, initialBullets) {
     const template = $(await renderExtensionTemplateAsync(`third-party/${extensionName}`, 'popup'));
-    const textarea = template.find('#ssPopupTextarea');
-    textarea.val(initialText);
+    const summaryArea = template.find('#ssPopupTextarea');
+    const memoriesList = template.find('#ssPopupMemoriesList');
+    const addBtn = template.find('#ssPopupAddMemory');
+
+    summaryArea.val(initialSummary);
+
+    const renderMemoryItem = (text = '') => {
+        const item = $(`
+            <div class="ss-memory-edit-item">
+                <textarea class="text_pole" placeholder="Enter a fact...">${text}</textarea>
+                <i class="fa-solid fa-trash-can ss-delete-icon ss-action-icon" title="Remove fact"></i>
+            </div>
+        `);
+        item.find('.ss-delete-icon').on('click', () => {
+            item.remove();
+            if (memoriesList.children().length === 0) {
+                memoriesList.append('<div class="ss-empty-hint" style="text-align:center; padding:10px; opacity:0.6;">No facts extracted.</div>');
+            }
+        });
+        return item;
+    };
+
+    const refreshEmptyHint = () => {
+        memoriesList.find('.ss-empty-hint').remove();
+        if (memoriesList.children().length === 0) {
+            memoriesList.append('<div class="ss-empty-hint" style="text-align:center; padding:10px; opacity:0.6;">No facts extracted.</div>');
+        }
+    };
+
+    if (Array.isArray(initialBullets) && initialBullets.length) {
+        initialBullets.forEach(b => memoriesList.append(renderMemoryItem(b)));
+    } else {
+        refreshEmptyHint();
+    }
+
+    addBtn.on('click', () => {
+        memoriesList.find('.ss-empty-hint').remove();
+        const item = renderMemoryItem();
+        memoriesList.append(item);
+        item.find('textarea').focus();
+    });
 
     const popup = new Popup(template, POPUP_TYPE.CONFIRM, '', {
         wide: true,
         large: true,
-        okButton: 'Save Summary',
+        okButton: 'Save Extraction',
         cancelButton: 'Discard'
     });
-    const result = await popup.show();
 
-    if (!result) {
-        return null;
+    const result = await popup.show();
+    if (!result) return null;
+
+    const finalSummary = String(summaryArea.val()).trim();
+    const finalMemories = [];
+    memoriesList.find('textarea').each(function () {
+        const val = $(this).val().trim();
+        if (val) finalMemories.push(val);
+    });
+
+    return { summary: finalSummary, memories: finalMemories };
+}
+
+function renderMemoriesList(container, chatState) {
+    const list = container?.querySelector('#ss_memories_list');
+    const emptyState = container?.querySelector('#ss_memories_empty_state');
+    if (!list) return;
+    list.innerHTML = '';
+    const memories = chatState?.memories || [];
+
+    if (!memories.length) {
+        if (emptyState) emptyState.style.display = 'block';
+        return;
+    } else if (emptyState) {
+        emptyState.style.display = 'none';
     }
 
-    return String(textarea.val()).trim();
+    // Newest first
+    [...memories].reverse().forEach((m) => {
+        const item = document.createElement('div');
+        item.className = 'ss-memory-edit-item';
+        item.style.marginBottom = '5px';
+        item.innerHTML = `
+            <textarea class="text_pole ss-memory-text" data-id="${m.id}" rows="2">${m.text || ''}</textarea>
+            <i class="menu_button fa-solid fa-trash-can ss-delete-icon ss-action-icon" title="Delete Memory" data-memory-action="delete" data-memory-id="${m.id}"></i>
+        `;
+        list.appendChild(item);
+    });
 }
 
 function updateSettingsUI(container) {
@@ -943,6 +1133,10 @@ function updateSettingsUI(container) {
     setValue('#ss_keepMessagesCount', settings.keepMessagesCount ?? defaultSettings.keepMessagesCount);
     setValue('#ss_manualSummaryLimit', settings.manualSummaryLimit ?? defaultSettings.manualSummaryLimit);
     setValue('#ss_summaryHistoryDepth', settings.summaryHistoryDepth ?? defaultSettings.summaryHistoryDepth);
+    // Memory extraction (§2)
+    setValue('#ss_memoryExtractionEnabled', settings.memoryExtractionEnabled ?? defaultSettings.memoryExtractionEnabled);
+    setValue('#ss_memoryPrompt', settings.memoryPrompt ?? defaultSettings.memoryPrompt);
+    setValue('#ss_maxMemories', settings.maxMemories ?? defaultSettings.maxMemories);
 
     // Radio for position
     const radios = container.querySelectorAll('input[name="injectPosition"]');
@@ -950,6 +1144,21 @@ function updateSettingsUI(container) {
 
     updateInjectionVisibility(container);
     updateContextControlVisibility(container);
+
+    // Visual feedback for prompt inheritance
+    const memoryEnabled = settings.memoryExtractionEnabled ?? defaultSettings.memoryExtractionEnabled;
+    const summaryPromptEl = container.querySelector('#ss_summaryPrompt');
+    const summaryHintEl = container.querySelector('#ss_summaryPrompt_hint');
+    if (summaryPromptEl) {
+        summaryPromptEl.disabled = memoryEnabled;
+        summaryPromptEl.style.opacity = memoryEnabled ? '0.5' : '1';
+        if (summaryHintEl) {
+            summaryHintEl.textContent = memoryEnabled
+                ? '⚠️ Disabled: Using the combined "Extraction Prompt" below.'
+                : 'Prompt used to generate summaries.';
+            summaryHintEl.style.color = memoryEnabled ? 'var(--smart-theme-yellow)' : '';
+        }
+    }
 
     const wordsDisplay = container.querySelector('#ss_summaryWords_value');
     if (wordsDisplay) wordsDisplay.textContent = settings.summaryWords ?? defaultSettings.summaryWords;
@@ -973,6 +1182,7 @@ function updateSettingsUI(container) {
     if (currentSummary) currentSummary.value = buildSummaryText(chatState, settings);
 
     renderSnapshotsList(container, chatState, settings);
+    renderMemoriesList(container, chatState);
 
     applyInjection();
     logDebug('log', 'Settings UI updated');
@@ -1096,11 +1306,13 @@ async function onSummariseClick() {
         logDebug('log', 'LLM summary result', cleaned);
         logDebug('log', `Memory bullets extracted: ${bullets.length}`);
 
-        const editedText = await showSummaryEditor(cleaned);
-        if (editedText === null) {
-            logDebug('log', 'User cancelled summary editor');
+        const result = await showCombinedEditor(cleaned, bullets);
+        if (!result) {
+            logDebug('log', 'User cancelled combined editor');
             return;
         }
+
+        const { summary: editedText, memories: approvedMemories } = result;
 
         // Update stored snapshot list
         const words = settings.summaryWords || defaultSettings.summaryWords;
@@ -1119,13 +1331,11 @@ async function onSummariseClick() {
         chatState.summaryCounter = nextId;
         chatState.snapshots = chatState.snapshots || [];
         chatState.snapshots.push(snapshot);
-        // Do not truncate snapshots here; we want to keep all history for the next summarisation.
-        // maxSummaries will be applied during injection via buildSummaryText.
         chatState.lastSummarisedIndex = chat.length;
 
-        // --- Memory Extraction (§2): persist bullets to Data Bank ---
+        // --- Memory Extraction (§2): persist approved memories to Data Bank ---
         const memoryEnabled = settings.memoryExtractionEnabled ?? defaultSettings.memoryExtractionEnabled;
-        if (memoryEnabled && bullets.length > 0) {
+        if (memoryEnabled && approvedMemories.length > 0) {
             const avatar = ctx?.characters?.[ctx?.characterId]?.avatar
                 || (typeof characters !== 'undefined' ? characters[ctx?.characterId]?.avatar : undefined);
 
@@ -1136,16 +1346,17 @@ async function onSummariseClick() {
                 // Build <memory> tag block (CharMemory-compatible format)
                 const timestamp = new Date().toISOString().slice(0, 16).replace('T', ' ');
                 const sceneLabel = snapshot.title;
-                const bulletsText = bullets.map(b => `- ${b}`).join('\n');
+                const bulletsText = approvedMemories.map(b => `- ${b}`).join('\n');
                 const newBlock = `<memory chat="${sceneLabel}" date="${timestamp}">\n${bulletsText}\n</memory>`;
 
                 await appendSSMemoriesBlock(avatar, fileName, newBlock);
 
                 // Update lightweight in-memory index
                 chatState.memories = chatState.memories || [];
-                const newMemories = bullets.map(text => ({
+                const newMemories = approvedMemories.map(text => ({
                     id: ++chatState.memoryCounter,
                     text,
+                    chatLabel: sceneLabel,
                     extractedAt: chat.length,
                     createdAt: Date.now(),
                     source: 'extracted',
@@ -1153,11 +1364,13 @@ async function onSummariseClick() {
                 chatState.memories.push(...newMemories);
                 pruneMemories(chatState, settings);
 
-                logDebug('log', `Persisted ${bullets.length} memories for ${sceneLabel}`);
-                toastr.info(`Extracted ${bullets.length} memory ${bullets.length === 1 ? 'fact' : 'facts'} to Data Bank.`, extensionName);
+                logDebug('log', `Persisted ${approvedMemories.length} memories for ${sceneLabel}`);
+                toastr.info(`Saved summary and ${approvedMemories.length} ${approvedMemories.length === 1 ? 'fact' : 'facts'} to Data Bank.`, extensionName);
             } else {
                 logDebug('warn', 'Memory extraction: no character avatar found, skipping Data Bank write');
             }
+        } else if (editedText) {
+            toastr.info('Saved scene summary.', extensionName);
         }
 
         if (settings.insertSceneBreak) {

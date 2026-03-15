@@ -140,6 +140,44 @@
     display: block;
 }
 
+.ss-memory-edit-item {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 8px;
+    padding: 8px;
+    background: var(--grey20);
+    border-radius: 5px;
+    border-left: 3px solid var(--smart-theme-blue);
+}
+
+.ss-memory-edit-item:last-child {
+    margin-bottom: 0;
+}
+
+.ss-memory-edit-item textarea {
+    flex: 1;
+    min-height: 40px;
+    padding: 5px;
+    font-size: 0.9em;
+    font-family: inherit;
+    resize: none;
+}
+
+.ss-action-icon {
+    cursor: pointer;
+    transition: opacity 0.2s;
+    opacity: 0.7;
+}
+
+.ss-action-icon:hover {
+    opacity: 1;
+}
+
+.ss-delete-icon {
+    color: var(--smart-theme-red);
+}
+
 .ss-radio-group {
     display: flex;
     flex-direction: column;

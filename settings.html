@@ -14,6 +14,8 @@
             <div class="ss-header-buttons" style="display:flex; gap:5px; flex-wrap:wrap;">
                 <button type="button" class="menu_button" data-ss-action="toggle-settings"><i
                         class="fa-solid fa-gear"></i> Settings</button>
+                <button type="button" class="menu_button" data-ss-action="toggle-memory"><i
+                        class="fa-solid fa-brain"></i> Memory</button>
                 <button type="button" class="menu_button" data-ss-action="toggle-summary"><i
                         class="fa-solid fa-list"></i> Snapshots</button>
             </div>
@@ -34,12 +36,36 @@
                     <label>Summary Prompt</label>
                     <textarea id="ss_summaryPrompt" name="summaryPrompt" class="ss-setting-input text_pole" rows="3"
                         placeholder="Prompt used to generate summaries..."></textarea>
+                    <small id="ss_summaryPrompt_hint" style="display:block; margin-top:4px; opacity:0.7;">Prompt used to generate summaries.</small>
                 </div>
                 <div class="setting_item">
                     <label>Consolidation Prompt</label>
                     <textarea id="ss_consolidationPrompt" name="consolidationPrompt" class="ss-setting-input text_pole" rows="3"
                         placeholder="Prompt used to merge multiple summaries..." title="Prompt used when consolidating multiple scenes down into one summary. Context will be a list of the summaries of the selected scenes."></textarea>
                 </div>
+                
+                <hr>
+                <h4>Memory Extraction</h4>
+                <div class="setting_item">
+                    <label class="checkbox_label">
+                        <input type="checkbox" id="ss_memoryExtractionEnabled" name="memoryExtractionEnabled" class="ss-setting-input">
+                        <span>Enable memory extraction</span>
+                    </label>
+                    <small style="display:block; margin-top:4px; opacity:0.7;">Co-extract atomic facts alongside scene summaries — stored in the Data Bank for Vector Storage retrieval.</small>
+                </div>
+                <div class="setting_item">
+                    <label>Extraction Prompt (Combined)</label>
+                    <textarea id="ss_memoryPrompt" name="memoryPrompt" class="ss-setting-input text_pole" rows="8"
+                        placeholder="Combined prompt for summary and memories..."></textarea>
+                    <small id="ss_memoryPrompt_hint" style="display:block; margin-top:4px; opacity:0.7;">This prompt replaces the Summary Prompt when extraction is enabled. Must include &lt;summary&gt; and &lt;memories&gt; tags.</small>
+                </div>
+                <div class="setting_item">
+                    <label>Max memories in index (0 = unlimited)</label>
+                    <input type="number" id="ss_maxMemories" name="maxMemories" class="ss-setting-input text_pole" min="0" step="1">
+                    <small style="display:block; margin-top:4px; opacity:0.7;">Limits the number of recent memories kept in the chat metadata index.</small>
+                </div>
+
+                <hr>
                 <div class="setting_item">
                     <label>Word limit: <span id="ss_summaryWords_value"></span></label>
                     <input type="range" id="ss_summaryWords" name="summaryWords" class="ss-setting-input" min="50"
@@ -193,7 +219,23 @@
             </div>
         </div>
 
-        <div id="ss_summary_panel" class="ss-panel">
+        <div id="ss_memory_panel" class="ss-panel" style="display:none;">
+            <div class="settings_section">
+                <h4 style="display:flex; justify-content:space-between; align-items:center;">
+                    Memory Management
+                    <small style="font-weight:normal; opacity:0.7;">Facts extracted for this chat</small>
+                </h4>
+                <div id="ss_memories_list" class="ss-memories-container" style="display:flex; flex-direction:column; gap:10px;">
+                    <!-- Memory items with textareas and delete buttons -->
+                </div>
+                <div id="ss_memories_empty_state" class="ss-empty"
+                    style="display:none; text-align:center; padding:20px; color:var(--grey70); border: 1px dashed var(--grey40); border-radius: 5px;">
+                    No memories extracted yet.
+                </div>
+            </div>
+        </div>
+
+        <div id="ss_summary_panel" class="ss-panel" style="display:none;">
             <div class="settings_section">
                 <h4 style="display:flex; justify-content:space-between; align-items:center;">
                     Snapshots

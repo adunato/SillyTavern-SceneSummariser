@@ -8,7 +8,7 @@
     "js": "index.js",
     "css": "style.css",
     "author": "User",
-    "description": "Placeholder extension scaffold for future scene summarization features.",
-    "version": "0.1.0",
+    "description": "Scene summarisation and memory extraction for maintaining long-term context.",
+    "version": "0.2.0",
     "manifest_version": 3
 }

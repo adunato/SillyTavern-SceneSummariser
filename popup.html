@@ -1,7 +1,24 @@
-<div class="flex-container flexFlowColumn height100p">
-    <div id="ssPopupHeader" class="margin-bot-10">
-        <h3>Review Generated Summary</h3>
-        <small class="hint">Edit the text below to perfect the scene summary before saving it to your chat metadata.</small>
+<div class="flex-container flexFlowColumn height100p" style="gap: 10px;">
+    <div id="ssPopupHeader">
+        <h3>Review Scene Extraction</h3>
+        <small class="hint">Refine the AI's summary and extracted facts before they are persisted to your chat history and Data Bank.</small>
     </div>
-    <textarea id="ssPopupTextarea" class="flex1 textarea_compact"></textarea>
+    
+    <div class="ss-popup-section">
+        <div class="ss-sub-label">Scene Summary</div>
+        <textarea id="ssPopupTextarea" class="text_pole textarea_compact" rows="6" style="width:100%; min-height: 100px; resize: vertical;"></textarea>
+    </div>
+
+    <div class="ss-popup-section flex1 flexFlowColumn overflow-hidden">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
+            <div class="ss-sub-label" style="margin:0;">Extracted Memories</div>
+            <button id="ssPopupAddMemory" class="menu_button interactable" style="font-size: 0.8em; padding: 2px 8px;">
+                <i class="fa-solid fa-plus"></i> Add Fact
+            </button>
+        </div>
+        <div id="ssPopupMemoriesList" class="flex1 overflow-auto" style="border: 1px solid var(--grey40); padding: 5px; border-radius: 5px; background: var(--grey10); min-height: 150px;">
+            <!-- Memory items go here -->
+        </div>
+        <small class="hint" style="margin-top:5px; opacity: 0.8;">Facts are stored in the Data Bank for Vector Storage retrieval.</small>
+    </div>
 </div>

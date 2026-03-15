@@ -16,7 +16,7 @@ This approach mirrors the one used by the CharMemory extension and intentionally
 
 ### `chatState` extensions
 
-```
+```javascript
 chatState {
   // Existing — unchanged
   snapshots:            Snapshot[]
@@ -34,58 +34,51 @@ Memory {
   id:          number
   text:        string         // single atomic fact (also stored in Data Bank file)
   extractedAt: number         // message index at time of extraction
-  createdAt:   timestamp      // ms since epoch
+  createdAt:   number         // ms since epoch
   source:      'extracted' | 'manual'
 }
 ```
 
 ### Data Bank storage
 
-Memories are persisted as a markdown file stored in the **chat's** Data Bank (not the character's), using the same `extension_settings.character_attachments` mechanism used by CharMemory:
+Memories are persisted as a markdown file stored in the **chat's** Data Bank (not the character's):
 
 - **File naming:** `ss-memories-<sanitised-chatId>.md`
-- **File format:** `<memory>` tag blocks, fully compatible with CharMemory's parser in `lib.js` — enabling future interoperability if desired.
-
-```markdown
-<memory chat="Scene #3" date="2026-03-15 09:45">
-- [Elena, Player — warehouse ambush]
-- Elena was shot in the shoulder during the ambush at Koval's warehouse.
-- Player carries a forged harbor pass obtained from Varro.
-</memory>
-```
-
-Each `<memory>` block maps to one extraction run (one scene summary). A new block is appended on every Update; blocks are never modified after writing.
-
-### Vector retrieval
-
-No custom retrieval code. After the file is written:
-1. ST's Vector Storage extension detects the new/updated Data Bank file.
-2. On the next generation it chunks and embeds the file automatically.
-3. Semantically relevant memory bullets are injected via the `4_vectors_data_bank` extension prompt slot.
-
-This is identical to how CharMemory retrieval works and requires only that the user has "Enable for files" checked in Vector Storage settings.
+- **File format:** `<memory>` tag blocks.
 
 ---
 
 ## Extraction Pipeline
 
-**Trigger:** same as the existing manual summarise flow (`onSummariseClick`). Memory extraction runs as part of that operation — no new toolbar button.
+**Trigger:** `onSummariseClick`.
 
 **Process:**
 
-1. Build a combined extraction prompt from `memoryPrompt` template (replaces `summaryPrompt` when `memoryExtractionEnabled = true`).
-2. Call `callSummarisationLLM` — the same function used for all other summarisation, honouring the Connection Profile setting.
-3. Parse the response:
-   - Split on `<summary>…</summary>` and `<memories>…</memories>` XML wrapper tags.
-   - If parsing fails: fall back to treating the whole response as a summary (no memories created). No crash, no data loss.
-4. Create one `Snapshot` from the `<summary>` text (existing flow unchanged).
-5. Parse `<memories>` bullets into `Memory` objects; append to `chatState.memories[]`.
-6. Append the new `<memory>` tag block to the Data Bank file via `writeMemoriesFile()`.
-7. Show the existing summary editor popup (summary text only; memories save silently).
-8. Prune oldest memories if `maxMemories > 0` and count exceeds limit.
-9. Call `applyInjection`.
+1. **Combined Prompt**: Build a prompt from `memoryPrompt` template (replaces `summaryPrompt` when `memoryExtractionEnabled = true`).
+2. **LLM Call**: Call `callSummarisationLLM`.
+3. **Parsing**: Parse response for `<summary>` and `<memories>` tags.
+4. **Combined Review**: Show the new **combined editor popup** containing the editable summary and a list of editable/deletable memory bullets.
+5. **Persistence**: Save approved summary to Snapshots and approved memories to the Data Bank and chat metadata.
+6. **Refresh**: Update UI components.
 
-**Batch summarise:** when `memoryExtractionEnabled` is true, each batch window also runs the combined prompt and appends a memory block. No popup shown per batch (existing behaviour).
+---
+
+## User Interface (Requirements)
+
+1.  **Combined Review Dialogue**: 
+    - Triggered after every manual summarisation. 
+    - Displays the summary in a textarea.
+    - Displays a dynamic list of extracted memory bullets.
+    - **Actions**: Users can edit any bullet text or delete a bullet entirely before saving.
+
+2.  **Unified Settings**: 
+    - Memory extraction configuration (Enable toggle, Prompt, Max memories) is located inside the existing **Settings** tab.
+    - This provides a single location for all "Generation" settings.
+
+3.  **Memory Management Tab**:
+    - The dedicated **Memory** tab is used to display the current list of facts stored for the chat.
+    - **Actions**: Each memory is editable (auto-saves) and deletable. 
+    - Deleting or editing a memory triggers a rewrite of the Data Bank file to maintain consistency with Vector Storage.
 
 ---
 
@@ -109,7 +102,6 @@ Output format — use these exact tags, nothing else:
 </summary>
 
 <memories>
-- [CharacterName, OtherName — short topic label]
 - [fact 1]
 - [fact 2]
 </memories>
@@ -119,46 +111,18 @@ If there are no facts worth remembering beyond the summary itself, omit the <mem
 
 ---
 
-## Settings Additions
+## Settings Additions (in Settings Tab)
 
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `memoryExtractionEnabled` | boolean | `true` | Co-extract memories alongside scene summaries |
 | `memoryPrompt` | string | (see above) | Combined extraction prompt template |
-| `maxMemories` | number | `0` | Maximum memories retained in `chatState.memories[]`; 0 = unlimited. Oldest pruned first. |
-
-No `contextTokenBudget`, no AI search, no context panel — those are Section 3 and 4 of the SPEC and are **out of scope for this CR**.
-
----
-
-## Injection
-
-`applyInjection` is **not changed** for this CR. Memory retrieval happens passively via Vector Storage. The `{{summary}}` template variable continues to work as before.
-
-The `injectTemplate` setting may reference `{{memories}}` in a future CR. For now the memories land in `4_vectors_data_bank` (Vector Storage's extension prompt slot), which is independent of the SceneSummariser injection slot.
-
----
-
-## Backwards Compatibility
-
-- `chatState` without `memories` / `memoryCounter` fields: initialised with empty defaults on first access — no migration.
-- When `memoryExtractionEnabled = false`: prompt falls back to `summaryPrompt`; no Data Bank file is written; no behaviour change from the user's perspective.
-- Existing snapshots, injection, batch summarise, consolidation, and filterContextInterceptor are untouched.
-
----
-
-## Dependencies
-
-- `uploadFileAttachment`, `getFileAttachment`, `deleteFileFromServer` from `scripts/chats.js` — same imports as CharMemory.
-- `convertTextToBase64`, `getStringHash` from `scripts/utils.js` — same as CharMemory.
-- ST Vector Storage extension — must be enabled by the user with "Enable for files" checked. The extension does not validate this at runtime; user-facing docs note the requirement.
+| `maxMemories` | number | `0` | Maximum memories retained in metadata index; 0 = unlimited. |
 
 ---
 
 ## Out of Scope
 
 - Active Context Panel (SPEC §4)
-- Update / Rebuild distinction (SPEC §3)
-- Token budget or picker UI
 - AI-powered search over memories
 - Per-character memory isolation
