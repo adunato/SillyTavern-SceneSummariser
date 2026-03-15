@@ -680,18 +680,16 @@ function bindSettingsUI(container) {
             const id = Number(memoryBtn.dataset.memoryId);
             const chatState = getChatState();
             if (action === 'delete') {
-                if (confirm('Delete this memory fact from the Data Bank?')) {
-                    chatState.memories = chatState.memories.filter(m => m.id !== id);
-                    const ctx = getContext();
-                    const avatar = ctx?.characters?.[ctx?.characterId]?.avatar
-                        || (typeof characters !== 'undefined' ? characters[ctx?.characterId]?.avatar : undefined);
-                    if (avatar) {
-                        const fileName = getSSMemoryFileName(getActiveChatId());
-                        await writeSSMemoriesFile(avatar, fileName, chatState.memories);
-                    }
-                    renderMemoriesList(container, chatState);
-                    saveSettingsDebounced();
+                chatState.memories = chatState.memories.filter(m => m.id !== id);
+                const ctx = getContext();
+                const avatar = ctx?.characters?.[ctx?.characterId]?.avatar
+                    || (typeof characters !== 'undefined' ? characters[ctx?.characterId]?.avatar : undefined);
+                if (avatar) {
+                    const fileName = getSSMemoryFileName(getActiveChatId());
+                    await writeSSMemoriesFile(avatar, fileName, chatState.memories);
                 }
+                renderMemoriesList(container, chatState);
+                saveSettingsDebounced();
             }
         }
     });
@@ -853,8 +851,37 @@ async function handleSnapshotAction(action, snapshotId, chatState, container) {
 
     if (action === 'delete') {
         if (confirm(`Delete "${snap.title || 'this snapshot'}"?`)) {
+            // Remove snapshot from state
             chatState.snapshots.splice(snapIndex, 1);
-            logDebug('log', `Deleted snapshot ${snapshotId}`);
+            
+            // Re-calculate lastSummarisedIndex
+            if (chatState.snapshots.length > 0) {
+                const latest = chatState.snapshots[chatState.snapshots.length - 1];
+                chatState.lastSummarisedIndex = latest.toIndex || 0;
+            } else {
+                chatState.lastSummarisedIndex = 0;
+            }
+
+            // Clean up chat marker if it exists
+            const ctx = getContext();
+            const fullChat = ctx?.chat || [];
+            let markerRemoved = false;
+            for (let i = fullChat.length - 1; i >= 0; i--) {
+                const m = fullChat[i];
+                if (m?.extra?.scene_summariser_marker && m?.extra?.snapshot_id === snapshotId) {
+                    fullChat.splice(i, 1);
+                    markerRemoved = true;
+                    logDebug('log', `Removed chat marker for snapshot ${snapshotId}`);
+                    break;
+                }
+            }
+
+            if (markerRemoved) {
+                if (typeof ctx.saveChat === 'function') await ctx.saveChat();
+                if (typeof reloadCurrentChat === 'function') await reloadCurrentChat();
+            }
+
+            logDebug('log', `Deleted snapshot ${snapshotId}. Reset lastSummarisedIndex to ${chatState.lastSummarisedIndex}`);
         }
     } else if (action === 'copy') {
         try {
