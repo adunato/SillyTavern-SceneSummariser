@@ -1141,10 +1141,40 @@ function renderMemoriesList(container, chatState) {
     });
 }
 
+/**
+ * Purges memories that are not associated with any existing snapshot.
+ * Useful for cleaning up orphans from older versions or failed deletions.
+ * @param {object} chatState 
+ */
+async function reconcileMemories(chatState) {
+    if (!chatState.memories?.length) return;
+
+    const snapshotTitles = new Set(chatState.snapshots.map(s => s.title));
+    const initialCount = chatState.memories.length;
+    
+    // Filter out memories whose label is missing or doesn't match an existing snapshot
+    chatState.memories = chatState.memories.filter(m => m.chatLabel && snapshotTitles.has(m.chatLabel));
+
+    if (chatState.memories.length !== initialCount) {
+        logDebug('log', `Reconciliation: Purged ${initialCount - chatState.memories.length} orphaned memories.`);
+        const ctx = getContext();
+        const avatar = ctx?.characters?.[ctx?.characterId]?.avatar
+            || (typeof characters !== 'undefined' ? characters[ctx?.characterId]?.avatar : undefined);
+        
+        if (avatar) {
+            const fileName = getSSMemoryFileName(getActiveChatId());
+            await writeSSMemoriesFile(avatar, fileName, chatState.memories);
+        }
+    }
+}
+
 function updateSettingsUI(container) {
     if (!container) return;
     const settings = extension_settings[settingsKey] || defaultSettings;
     const chatState = getChatState();
+
+    // Run reconciliation to clear orphans
+    reconcileMemories(chatState);
 
     const setValue = (selector, val) => {
         const el = container.querySelector(selector);
@@ -1480,8 +1510,19 @@ async function onBatchSummariseClick() {
     chatState.snapshots = [];
     chatState.summaryCounter = 0;
     chatState.lastSummarisedIndex = 0;
+    chatState.memories = [];
+    chatState.memoryCounter = 0;
 
     const ctx = getContext();
+    const avatar = ctx?.characters?.[ctx?.characterId]?.avatar
+        || (typeof characters !== 'undefined' ? characters[ctx?.characterId]?.avatar : undefined);
+
+    // Clear Data Bank file at start of batch
+    if (avatar) {
+        const fileName = getSSMemoryFileName(getActiveChatId());
+        await writeSSMemoriesFile(avatar, fileName, []);
+    }
+
     const fullChat = ctx?.chat || [];
 
     // Strip old markers from fullChat to reset the state physically
