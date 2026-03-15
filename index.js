@@ -11,6 +11,7 @@ import {
 } from '../../../../script.js';
 import { eventSource, event_types } from '../../../../scripts/events.js';
 import { ConnectionManagerRequestService } from '../../shared.js';
+import { POPUP_RESULT, POPUP_TYPE, Popup } from '../../../popup.js';
 
 const extensionName = 'SillyTavern-SceneSummariser';
 const settingsKey = extensionName;
@@ -19,6 +20,7 @@ const defaultSettings = {
     enabled: true,
     autoSummarise: false,
     summaryPrompt: 'Ignore previous instructions. Summarize the most important facts and events in the story so far. If a summary already exists in your memory, use that as a base and expand with new facts. Limit the summary to {{words}} words or less. Your response should include nothing but the summary.',
+    consolidationPrompt: 'Create a single, cohesive summary by merging the following scene summaries. Remove redundant information and ensure the narrative flows logically. Limit the final summary to {{words}} words or less. Your response should include nothing but the summary.',
     summaryWords: 200,
     storeHistory: true,
     maxSummaries: 5,
@@ -35,6 +37,8 @@ const defaultSettings = {
     maxBatchSummaries: 0,
     keepMessagesCount: 0,
     connectionProfileId: '',
+    manualSummaryLimit: 0, // 0 = unlimited
+    summaryHistoryDepth: 0, // 0 = all
 };
 
 const chatStateDefaults = {
@@ -50,8 +54,10 @@ const legacyStateKeys = Object.keys(chatStateDefaults);
 
 let buttonIntervalId = null;
 let isSummarising = false;
+let currentAbortController = null;
 let debugMessages = [];
 let settingsContainer = null;
+
 
 function getLatestSnapshot(chatState) {
     if (!chatState?.snapshots?.length) return null;
@@ -217,7 +223,14 @@ function createSummariseButton() {
     button.className = 'gg-action-button ss-action-button fa-solid fa-clapperboard';
     button.title = 'Summarise Scene';
 
-    button.addEventListener('click', onSummariseClick);
+    button.addEventListener('click', () => {
+        if (isSummarising && currentAbortController) {
+            logDebug('log', 'Aborting summarisation by user request');
+            currentAbortController.abort();
+            return;
+        }
+        onSummariseClick();
+    });
 
     return button;
 }
@@ -342,6 +355,16 @@ function bindSettingsUI(container) {
             if (display) display.textContent = newValue;
         }
 
+        if (name === 'manualSummaryLimit') {
+            const display = container.querySelector('#ss_manualSummaryLimit_value');
+            if (display) display.textContent = newValue;
+        }
+
+        if (name === 'summaryHistoryDepth') {
+            const display = container.querySelector('#ss_summaryHistoryDepth_value');
+            if (display) display.textContent = newValue;
+        }
+
         if (['injectEnabled', 'injectPosition', 'injectDepth', 'injectScan', 'injectRole', 'injectTemplate'].includes(name)) {
             applyInjection();
         }
@@ -421,9 +444,28 @@ function bindSettingsUI(container) {
         summariseButton.addEventListener('click', onSummariseClick);
     }
 
+    const consolidateButton = container.querySelector('#ss_consolidate_button');
+    if (consolidateButton) {
+        consolidateButton.addEventListener('click', onConsolidateClick);
+    }
+
+    // Snapshot selection for consolidation
+    container.addEventListener('change', (event) => {
+        if (event.target.classList.contains('ss-snapshot-select')) {
+            handleSnapshotSelectionChange(container);
+        }
+    });
+
     const batchSummariseButton = container.querySelector('#ss_batch_summarise_button');
     if (batchSummariseButton) {
-        batchSummariseButton.addEventListener('click', onBatchSummariseClick);
+        batchSummariseButton.addEventListener('click', () => {
+            if (isSummarising && currentAbortController) {
+                logDebug('log', 'Aborting batch summarisation by user request');
+                currentAbortController.abort();
+                return;
+            }
+            onBatchSummariseClick();
+        });
     }
 
     // Connection Profile dropdown — powered by Connection Manager
@@ -483,6 +525,7 @@ function renderSnapshotsList(container, chatState, settings) {
                 <div class="inline-drawer-header ss-snapshot-header">
                     <div class="inline-drawer-toggle inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
                     <div class="ss-snapshot-header-content">
+                         <input type="checkbox" class="ss-snapshot-select ss-no-propagate" data-snap-id="${snap.id}" title="Select for consolidation" style="cursor: pointer;">
                          <div class="ss-snapshot-title text_pole textarea_compact" title="${title}">${title}</div>
                          <div class="ss-header-actions ss-no-propagate">
                                <i class="menu_button fa-solid fa-arrows-rotate ss-action-icon" title="Regenerate" data-snap-action="regen" data-snap-id="${snap.id}"></i>
@@ -541,29 +584,64 @@ async function handleSnapshotAction(action, snapshotId, chatState, container) {
  * Calls the LLM for summarisation. Uses the configured Connection Profile if set,
  * otherwise falls back to the main API via generateRaw.
  * @param {string} prompt The prompt to send to the LLM.
+ * @param {AbortSignal} [signal] Optional abort signal to cancel the request.
  * @returns {Promise<string>} The raw LLM response text.
  */
-async function callSummarisationLLM(prompt) {
+async function callSummarisationLLM(prompt, signal) {
     const settings = extension_settings[settingsKey];
     const profileId = settings?.connectionProfileId || '';
+
+    console.debug(`[${extensionName}] Summarisation Prompt:\n`, prompt);
 
     if (profileId) {
         try {
             logDebug('log', `Using Connection Profile "${profileId}" for summarisation`);
-            const response = await ConnectionManagerRequestService.sendRequest(
-                profileId,
-                prompt,
-                settings.summaryWords ? settings.summaryWords * 4 : 1024, // rough token estimate
-            );
-            // ExtractedData shape: { content: string, reasoning: string }
-            return response?.content ?? String(response ?? '');
+
+            // ConnectionManagerRequestService does not cleanly expose an abort signal for sendRequest,
+            // but we can wrap it in an abortable promise if needed, or see if it natively supports it.
+            // For now, if aborted, we'll throw immediately.
+            if (signal?.aborted) throw new Error('AbortError');
+
+            return await new Promise((resolve, reject) => {
+                const onAbort = () => reject(new Error('AbortError'));
+                if (signal) signal.addEventListener('abort', onAbort);
+
+                ConnectionManagerRequestService.sendRequest(
+                    profileId,
+                    prompt,
+                    settings.summaryWords ? settings.summaryWords * 4 : 1024, // rough token estimate
+                ).then(response => {
+                    if (signal?.aborted) return reject(new Error('AbortError'));
+                    resolve(response?.content ?? String(response ?? ''));
+                }).catch(reject).finally(() => {
+                    if (signal) signal.removeEventListener('abort', onAbort);
+                });
+            });
         } catch (err) {
+            if (err?.message === 'AbortError' || String(err).includes('AbortError') || String(err).includes('aborted')) throw err;
             logDebug('error', 'Connection Profile request failed, falling back to generateRaw', err?.message || err);
             console.warn(`[${extensionName}] Connection Profile failed, falling back to main API:`, err);
         }
     }
 
-    return await generateRaw({ prompt, trimNames: false });
+    // Wrap generateRaw which also doesn't take signal cleanly in this version,
+    // although ST core generation functions do support throwing if we just hook it up.
+    // generateRaw does not accept an AbortSignal argument directly, but we can do a similar wrapper.
+    if (signal?.aborted) throw new Error('AbortError');
+    return await new Promise((resolve, reject) => {
+        const onAbort = () => reject(new Error('AbortError'));
+        if (signal) signal.addEventListener('abort', onAbort);
+
+        generateRaw({ prompt, trimNames: false, signal })
+            .then(res => {
+                if (signal?.aborted) return reject(new Error('AbortError'));
+                resolve(res);
+            })
+            .catch(reject)
+            .finally(() => {
+                if (signal) signal.removeEventListener('abort', onAbort);
+            });
+    });
 }
 
 async function regenerateSnapshot(snapshot, settings, chatState) {
@@ -587,7 +665,13 @@ async function regenerateSnapshot(snapshot, settings, chatState) {
 
     // Fix: Only use summaries prior to this one as context
     const snapshotIndex = chatState.snapshots.findIndex(s => s.id === snapshot.id);
-    const previousSnapshots = snapshotIndex > -1 ? chatState.snapshots.slice(0, snapshotIndex) : [];
+    let previousSnapshots = snapshotIndex > -1 ? chatState.snapshots.slice(0, snapshotIndex) : [];
+
+    const historyDepth = Number(settings.summaryHistoryDepth || defaultSettings.summaryHistoryDepth);
+    if (historyDepth > 0 && previousSnapshots.length > historyDepth) {
+        previousSnapshots = previousSnapshots.slice(-historyDepth);
+    }
+
     const previousSummaryText = previousSnapshots.map(s => `${s.title}: ${s.text}`).join('\n');
 
     const prompt = promptTemplate
@@ -602,7 +686,13 @@ async function regenerateSnapshot(snapshot, settings, chatState) {
             cleaned = cleaned.substring(prompt.trim().length).trim();
         }
 
-        snapshot.text = cleaned;
+        const editedText = await showSummaryEditor(cleaned);
+        if (editedText === null) {
+            logDebug('log', 'User cancelled summary regeneration');
+            return;
+        }
+
+        snapshot.text = editedText;
         snapshot.createdAt = Date.now();
         logDebug('log', `Regenerated snapshot ${snapshot.id}`);
     } catch (err) {
@@ -611,6 +701,30 @@ async function regenerateSnapshot(snapshot, settings, chatState) {
     }
 }
 
+/**
+ * Shows the scene summary popup modal for reviewing and editing the generated summary before saving.
+ * @param {string} initialText The generated text.
+ * @returns {Promise<string|null>} The edited text, or null if cancelled.
+ */
+async function showSummaryEditor(initialText) {
+    const template = $(await renderExtensionTemplateAsync(`third-party/${extensionName}`, 'popup'));
+    const textarea = template.find('#ssPopupTextarea');
+    textarea.val(initialText);
+
+    const popup = new Popup(template, POPUP_TYPE.CONFIRM, '', {
+        wide: true,
+        large: true,
+        okButton: 'Save Summary',
+        cancelButton: 'Discard'
+    });
+    const result = await popup.show();
+
+    if (!result) {
+        return null;
+    }
+
+    return String(textarea.val()).trim();
+}
 
 function updateSettingsUI(container) {
     if (!container) return;
@@ -632,6 +746,7 @@ function updateSettingsUI(container) {
     setValue('#ss_enabled', settings.enabled ?? defaultSettings.enabled);
     setValue('#ss_autoSummarise', settings.autoSummarise ?? defaultSettings.autoSummarise);
     setValue('#ss_summaryPrompt', settings.summaryPrompt ?? defaultSettings.summaryPrompt);
+    setValue('#ss_consolidationPrompt', settings.consolidationPrompt ?? defaultSettings.consolidationPrompt);
     setValue('#ss_summaryWords', settings.summaryWords ?? defaultSettings.summaryWords);
     setValue('#ss_storeHistory', settings.storeHistory ?? defaultSettings.storeHistory);
     setValue('#ss_maxSummaries', settings.maxSummaries ?? defaultSettings.maxSummaries);
@@ -646,6 +761,8 @@ function updateSettingsUI(container) {
     setValue('#ss_batchSize', settings.batchSize ?? defaultSettings.batchSize);
     setValue('#ss_maxBatchSummaries', settings.maxBatchSummaries ?? defaultSettings.maxBatchSummaries);
     setValue('#ss_keepMessagesCount', settings.keepMessagesCount ?? defaultSettings.keepMessagesCount);
+    setValue('#ss_manualSummaryLimit', settings.manualSummaryLimit ?? defaultSettings.manualSummaryLimit);
+    setValue('#ss_summaryHistoryDepth', settings.summaryHistoryDepth ?? defaultSettings.summaryHistoryDepth);
 
     // Radio for position
     const radios = container.querySelectorAll('input[name="injectPosition"]');
@@ -665,6 +782,12 @@ function updateSettingsUI(container) {
 
     const keepMessagesCountDisplay = container.querySelector('#ss_keepMessagesCount_value');
     if (keepMessagesCountDisplay) keepMessagesCountDisplay.textContent = settings.keepMessagesCount ?? defaultSettings.keepMessagesCount;
+
+    const manualSummaryLimitDisplay = container.querySelector('#ss_manualSummaryLimit_value');
+    if (manualSummaryLimitDisplay) manualSummaryLimitDisplay.textContent = settings.manualSummaryLimit ?? defaultSettings.manualSummaryLimit;
+
+    const summaryHistoryDepthDisplay = container.querySelector('#ss_summaryHistoryDepth_value');
+    if (summaryHistoryDepthDisplay) summaryHistoryDepthDisplay.textContent = settings.summaryHistoryDepth ?? defaultSettings.summaryHistoryDepth;
 
     const currentSummary = container.querySelector('#ss_currentSummary');
     if (currentSummary) currentSummary.value = buildSummaryText(chatState, settings);
@@ -716,12 +839,14 @@ async function onSummariseClick() {
         return;
     }
     isSummarising = true;
+    currentAbortController = new AbortController();
 
     const button = document.getElementById('ss_summarise_button');
     const originalTitle = button?.title;
     if (button) {
-        button.classList.add('disabled');
-        button.title = 'Summarising...';
+        button.classList.remove('fa-clapperboard');
+        button.classList.add('fa-stop', 'ss-stop-btn');
+        button.title = 'Stop Summarising';
     }
     logDebug('log', 'Summarise clicked');
 
@@ -730,9 +855,13 @@ async function onSummariseClick() {
     const words = settings.summaryWords || defaultSettings.summaryWords;
     const promptTemplate = settings.summaryPrompt || defaultSettings.summaryPrompt;
 
-    // Pass ALL summaries to the generation prompt so the AI has full context,
-    // regardless of the injection limit (maxSummaries).
-    const allSummaries = (chatState.snapshots || [])
+    const historyDepth = Number(settings.summaryHistoryDepth || defaultSettings.summaryHistoryDepth);
+    let previousSnapshots = chatState.snapshots || [];
+    if (historyDepth > 0 && previousSnapshots.length > historyDepth) {
+        previousSnapshots = previousSnapshots.slice(-historyDepth);
+    }
+
+    const allSummaries = previousSnapshots
         .map(s => `${s.title || 'Scene #' + s.id}: ${s.text}`)
         .join('\n');
 
@@ -766,9 +895,13 @@ async function onSummariseClick() {
         logDebug('log', `Sample message: name="${sample.name}", is_user=${sample.is_user}, mes="${(sample.mes || '').substring(0, 20)}..."`);
     }
 
-    const transcript = newMessages
-        .filter(m => !m.extra?.scene_summariser_marker)
-        .slice(-50) // limit to most recent chunk to keep prompt small
+    const manualSummaryLimit = Number(settings.manualSummaryLimit || defaultSettings.manualSummaryLimit);
+    let messagesToSummarise = newMessages.filter(m => !m.extra?.scene_summariser_marker);
+    if (manualSummaryLimit > 0) {
+        messagesToSummarise = messagesToSummarise.slice(-manualSummaryLimit);
+    }
+
+    const transcript = messagesToSummarise
         .map((m) => {
             const speaker = m.name || (m.is_user ? name1 : name2);
             return `${speaker}: ${m.mes || ''}`.trim();
@@ -780,19 +913,25 @@ async function onSummariseClick() {
         + (!promptText.includes('{{last_messages}}') ? `\n\nChat history:\n${transcript}` : '');
 
     try {
-        const result = await callSummarisationLLM(prompt);
+        const result = await callSummarisationLLM(prompt, currentAbortController.signal);
         let cleaned = (result || '').trim();
         if (cleaned.startsWith(prompt.trim())) {
             cleaned = cleaned.substring(prompt.trim().length).trim();
         }
         logDebug('log', 'LLM summary result', cleaned);
 
+        const editedText = await showSummaryEditor(cleaned);
+        if (editedText === null) {
+            logDebug('log', 'User cancelled summary editor');
+            return;
+        }
+
         // Update stored snapshot list
         const nextId = (chatState.summaryCounter ?? 0) + 1;
         const snapshot = {
             id: nextId,
             title: `Scene #${nextId}`,
-            text: cleaned,
+            text: editedText,
             createdAt: Date.now(),
             fromIndex: lastIdx,
             toIndex: chat.length,
@@ -816,15 +955,22 @@ async function onSummariseClick() {
         applyInjection();
         saveSettingsDebounced();
     } catch (error) {
-        console.error(`[${extensionName}] Error during summarisation:`, error);
-        logDebug('error', 'Summarisation error', error?.message || error);
-        toastr.error('Summarisation error: ' + (error?.message || error));
+        if (error?.message === 'AbortError' || String(error).includes('AbortError') || String(error).includes('aborted')) {
+            logDebug('warn', 'Summarisation aborted by user');
+            toastr.info('Summarisation aborted');
+        } else {
+            console.error(`[${extensionName}] Error during summarisation:`, error);
+            logDebug('error', 'Summarisation error', error?.message || error);
+            toastr.error('Summarisation error: ' + (error?.message || error));
+        }
     } finally {
         if (button) {
-            button.classList.remove('disabled');
+            button.classList.remove('fa-stop', 'ss-stop-btn');
+            button.classList.add('fa-clapperboard');
             button.title = originalTitle || 'Summarise Scene';
         }
         isSummarising = false;
+        currentAbortController = null;
     }
 }
 
@@ -844,12 +990,13 @@ async function onBatchSummariseClick() {
     }
 
     isSummarising = true;
+    currentAbortController = new AbortController();
 
     const button = document.getElementById('ss_batch_summarise_button');
     const originalText = button?.innerHTML;
     if (button) {
-        button.classList.add('disabled');
-        button.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Initializing Batch...';
+        button.classList.add('ss-stop-btn');
+        button.innerHTML = '<i class="fa-solid fa-stop"></i> Stop Batch...';
     }
     logDebug('log', 'Batch Summarise clicked');
 
@@ -889,6 +1036,7 @@ async function onBatchSummariseClick() {
             button.innerHTML = originalText;
         }
         isSummarising = false;
+        currentAbortController = null;
         toastr.info('No messages to summarise.');
         return;
     }
@@ -920,7 +1068,13 @@ async function onBatchSummariseClick() {
             button.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Batch ${i + 1} of ${totalBatches}...`;
         }
 
-        const allSummariesContext = (chatState.snapshots || [])
+        const historyDepth = Number(settings.summaryHistoryDepth || defaultSettings.summaryHistoryDepth);
+        let previousSnapshots = chatState.snapshots || [];
+        if (historyDepth > 0 && previousSnapshots.length > historyDepth) {
+            previousSnapshots = previousSnapshots.slice(-historyDepth);
+        }
+
+        const allSummariesContext = previousSnapshots
             .map(s => `${s.title || 'Scene #' + s.id}: ${s.text}`)
             .join('\n');
 
@@ -940,7 +1094,7 @@ async function onBatchSummariseClick() {
             + (!promptText.includes('{{last_messages}}') ? `\n\nChat history:\n${transcript}` : '');
 
         try {
-            const result = await callSummarisationLLM(prompt);
+            const result = await callSummarisationLLM(prompt, currentAbortController.signal);
             let cleaned = (result || '').trim();
             if (cleaned.startsWith(prompt.trim())) {
                 cleaned = cleaned.substring(prompt.trim().length).trim();
@@ -978,17 +1132,32 @@ async function onBatchSummariseClick() {
             // Update UI dynamically to show the new snapshot
             updateSettingsUI(settingsContainer);
         } catch (error) {
-            console.error(`[${extensionName}] Error during batch summarisation (batch ${i + 1}):`, error);
-            logDebug('error', `Batch ${i + 1} error`, error?.message || error);
-            toastr.error(`Error generating batch ${i + 1}. Stopping.`);
-            break; // Stop remaining batches on error
+            if (error?.message === 'AbortError' || String(error).includes('AbortError') || String(error).includes('aborted')) {
+                logDebug('warn', `Batch summarisation aborted at batch ${i + 1}/${totalBatches}`);
+                toastr.info(`Batch summarisation stopped at batch ${i + 1}`);
+                break;
+            } else {
+                console.error(`[${extensionName}] Error during batch summarisation (batch ${i + 1}):`, error);
+                logDebug('error', `Batch ${i + 1} error`, error?.message || error);
+                toastr.error(`Error generating batch ${i + 1}. Stopping.`);
+                break; // Stop remaining batches on error
+            }
         }
     }
 
+    if (successCount > 0) {
+        logDebug('log', `Batch completely inserted ${successCount} summaries`);
+        toastr.success(`Batch summarisation complete: ${successCount} new summaries generated.`);
+        applyInjection();
+        saveSettingsDebounced();
+    }
+
     if (button) {
-        button.classList.remove('disabled');
+        button.classList.remove('ss-stop-btn');
         button.innerHTML = originalText;
     }
+    isSummarising = false;
+    currentAbortController = null;
 
     if (markersToInsert.length > 0) {
         // Insert markers in reverse order so we don't shift earlier indices
@@ -1033,8 +1202,145 @@ async function onBatchSummariseClick() {
     }
 
     applyInjection();
+    applyInjection();
     saveSettingsDebounced();
     isSummarising = false;
+}
+
+function handleSnapshotSelectionChange(container) {
+    if (!container) return;
+    const checkboxes = Array.from(container.querySelectorAll('.ss-snapshot-select'));
+    if (!checkboxes.length) return;
+
+    let firstChecked = -1;
+    let lastChecked = -1;
+
+    checkboxes.forEach((cb, index) => {
+        if (cb.checked) {
+            if (firstChecked === -1) firstChecked = index;
+            lastChecked = index;
+        }
+    });
+
+    if (firstChecked !== -1 && lastChecked !== -1 && lastChecked > firstChecked) {
+        // Enforce consecutive selection
+        for (let i = firstChecked; i <= lastChecked; i++) {
+            checkboxes[i].checked = true;
+        }
+    }
+
+    const consolidateButton = container.querySelector('#ss_consolidate_button');
+    if (consolidateButton) {
+        const checkedCount = checkboxes.filter(cb => cb.checked).length;
+        consolidateButton.style.display = checkedCount >= 2 ? '' : 'none';
+    }
+}
+
+async function onConsolidateClick() {
+    if (isSummarising || !settingsContainer) return;
+    
+    const checkboxes = Array.from(settingsContainer.querySelectorAll('.ss-snapshot-select'));
+    const selectedIds = checkboxes.filter(cb => cb.checked).map(cb => Number(cb.dataset.snapId));
+    
+    if (selectedIds.length < 2) {
+        toastr.info('Please select at least two consecutive snapshots to consolidate.');
+        return;
+    }
+
+    isSummarising = true;
+    currentAbortController = new AbortController();
+    const button = settingsContainer.querySelector('#ss_consolidate_button');
+    const originalHtml = button?.innerHTML;
+    if (button) {
+        button.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Consolidating...';
+        button.disabled = true;
+    }
+
+    try {
+        const settings = extension_settings[settingsKey];
+        const chatState = getChatState();
+        const words = settings.summaryWords || defaultSettings.summaryWords;
+        const promptTemplate = settings.consolidationPrompt || defaultSettings.consolidationPrompt;
+
+        // Gather snapshots to consolidate
+        const snapshotsToConsolidate = chatState.snapshots.filter(s => selectedIds.includes(s.id));
+        if (snapshotsToConsolidate.length !== selectedIds.length) {
+            throw new Error('Could not find all selected snapshots in chat state.');
+        }
+
+        const summariesText = snapshotsToConsolidate
+            .map(s => `${s.title}: ${s.text}`)
+            .join('\n\n');
+
+        const prompt = promptTemplate
+            .replace('{{words}}', words)
+            + `\n\nScenes to consolidate:\n${summariesText}`;
+
+        const result = await callSummarisationLLM(prompt, currentAbortController.signal);
+        let cleaned = (result || '').trim();
+        if (cleaned.startsWith(prompt.trim())) {
+            cleaned = cleaned.substring(prompt.trim().length).trim();
+        }
+
+        const editedText = await showSummaryEditor(cleaned);
+        if (editedText === null) {
+            logDebug('log', 'User cancelled consolidation editor');
+            return;
+        }
+
+        // Determine title & indices
+        const firstSnap = snapshotsToConsolidate[0];
+        const lastSnap = snapshotsToConsolidate[snapshotsToConsolidate.length - 1];
+        
+        // Match numbers from "Scene #X" to form "Scene X-Y", fallback to IDs
+        const extractNum = (title, id) => {
+            const match = /Scene #?(\d+(?:-\d+)?)/i.exec(title);
+            return match ? match[1] : id;
+        };
+        const startNum = extractNum(firstSnap.title, firstSnap.id);
+        const endNum = extractNum(lastSnap.title, lastSnap.id);
+        const newTitle = `Scene ${startNum}-${endNum}`;
+
+        const newId = (chatState.summaryCounter ?? 0) + 1;
+        chatState.summaryCounter = newId;
+
+        const newSnapshot = {
+            id: newId,
+            title: newTitle,
+            text: editedText,
+            createdAt: Date.now(),
+            fromIndex: firstSnap.fromIndex,
+            toIndex: lastSnap.toIndex,
+            source: 'consolidation',
+            words,
+        };
+
+        // Remove old snapshots and insert the new one
+        const startIndex = chatState.snapshots.findIndex(s => s.id === firstSnap.id);
+        chatState.snapshots.splice(startIndex, snapshotsToConsolidate.length, newSnapshot);
+
+        logDebug('log', `Consolidated ${snapshotsToConsolidate.length} snapshots into ${newTitle}`);
+        toastr.success(`Successfully consolidated ${snapshotsToConsolidate.length} scenes.`);
+
+        updateSettingsUI(settingsContainer);
+        applyInjection();
+        saveSettingsDebounced();
+    } catch (error) {
+        if (error?.message === 'AbortError' || String(error).includes('AbortError') || String(error).includes('aborted')) {
+            logDebug('warn', 'Consolidation aborted by user');
+        } else {
+            console.error(`[${extensionName}] Error during consolidation:`, error);
+            logDebug('error', 'Consolidation error', error?.message || error);
+            toastr.error('Consolidation error: ' + (error?.message || error));
+        }
+    } finally {
+        if (button) {
+            button.innerHTML = originalHtml;
+            button.disabled = false;
+        }
+        isSummarising = false;
+        currentAbortController = null;
+    }
 }
 
 function applyInjection() {

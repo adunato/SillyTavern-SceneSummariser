@@ -25,13 +25,20 @@
                 <h4>General &amp; Generation</h4>
                 <div class="setting_item">
                     <label for="ss_connectionProfile">Connection Profile</label>
-                    <select id="ss_connectionProfile" class="text_pole" title="Select a dedicated Connection Profile for summarisation. Leave blank to use the main chat API."></select>
-                    <small style="display:block; margin-top:4px; opacity:0.7;">Select a Connection Manager profile to use a dedicated model/API for summarisation. Blank = main chat API.</small>
+                    <select id="ss_connectionProfile" class="text_pole"
+                        title="Select a dedicated Connection Profile for summarisation. Leave blank to use the main chat API."></select>
+                    <small style="display:block; margin-top:4px; opacity:0.7;">Select a Connection Manager profile to
+                        use a dedicated model/API for summarisation. Blank = main chat API.</small>
                 </div>
                 <div class="setting_item">
                     <label>Summary Prompt</label>
                     <textarea id="ss_summaryPrompt" name="summaryPrompt" class="ss-setting-input text_pole" rows="3"
                         placeholder="Prompt used to generate summaries..."></textarea>
+                </div>
+                <div class="setting_item">
+                    <label>Consolidation Prompt</label>
+                    <textarea id="ss_consolidationPrompt" name="consolidationPrompt" class="ss-setting-input text_pole" rows="3"
+                        placeholder="Prompt used to merge multiple summaries..." title="Prompt used when consolidating multiple scenes down into one summary. Context will be a list of the summaries of the selected scenes."></textarea>
                 </div>
                 <div class="setting_item">
                     <label>Word limit: <span id="ss_summaryWords_value"></span></label>
@@ -45,6 +52,16 @@
                             title="If enabled, all stored summaries will be injected. If disabled, only the latest summary is injected.">Store
                             History</label>
                     </div>
+                </div>
+                <div class="setting_item">
+                    <label
+                        title="When generating a new summary, how many previous scene summaries should be included in the {{summary}} placeholder for context. 0 = Include all previous summaries.">
+                        Summary History Depth: <span id="ss_summaryHistoryDepth_value"></span>
+                    </label>
+                    <input type="range" id="ss_summaryHistoryDepth" name="summaryHistoryDepth" class="ss-setting-input"
+                        min="0" max="20" step="1">
+                    <small style="display:block; margin-top:5px; opacity:0.7;">Number of previous snapshots to include
+                        as context for the LLM when generating a new scene summary. 0 = All.</small>
                 </div>
                 <div class="setting_item">
                     <label>Max Snapshots History</label>
@@ -94,6 +111,17 @@
                             title="Inserts a visual separator in the chat log when a summary is generated">Insert visual
                             scene break marker</label>
                     </div>
+                </div>
+
+                <div class="setting_item">
+                    <label
+                        title="Limit the number of recent messages passed to the LLM during manual 'Summarise Scene' clicks. Helps save tokens or limit context. 0 means unlimited.">
+                        Manual Summarisation Prompt Limit (Messages): <span id="ss_manualSummaryLimit_value"></span>
+                    </label>
+                    <input type="range" id="ss_manualSummaryLimit" name="manualSummaryLimit" class="ss-setting-input"
+                        min="0" max="250" step="10">
+                    <small style="display:block; margin-top:5px; opacity:0.7;">How many unsummarised messages at most
+                        should be sent to the LLM. 0 = Send all of them since the last summary.</small>
                 </div>
                 <hr>
                 <h4>Debug Settings</h4>
@@ -169,10 +197,16 @@
             <div class="settings_section">
                 <h4 style="display:flex; justify-content:space-between; align-items:center;">
                     Snapshots
-                    <button id="ss_batch_summarise_button" class="menu_button interactable"
-                        style="font-size: 0.9em; padding: 4px 8px;">
-                        <i class="fa-solid fa-layer-group"></i> Run Batch Summarisation
-                    </button>
+                    <div style="display:flex; gap:5px;">
+                        <button id="ss_consolidate_button" class="menu_button interactable"
+                            style="font-size: 0.9em; padding: 4px 8px; display: none;" title="Consolidate selected scenes">
+                            <i class="fa-solid fa-compress"></i> Consolidate
+                        </button>
+                        <button id="ss_batch_summarise_button" class="menu_button interactable"
+                            style="font-size: 0.9em; padding: 4px 8px;">
+                            <i class="fa-solid fa-layer-group"></i> Run Batch Summarisation
+                        </button>
+                    </div>
                 </h4>
 
                 <div id="ss_snapshots_list" class="ss-snapshots-container"></div>
