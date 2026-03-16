@@ -305,8 +305,13 @@ function parseExtractionResponse(raw) {
     const memoryBlocksRaw = [...text.matchAll(/<memor(?:y|ies)>([\s\S]*?)<\/memor(?:y|ies)>/gi)];
 
     let summaryText = summaryMatch ? summaryMatch[1].trim() : text;
-    // Strip any residual or malformed tags
+    
+    // 1. Remove any <memory> or <memories> blocks (including content) that might be inside the summaryText
+    summaryText = summaryText.replace(/<memor(?:y|ies)>[\s\S]*?<\/memor(?:y|ies)>/gi, '').trim();
+    
+    // 2. Strip any residual or malformed tags (just the tags, keep content)
     summaryText = summaryText.replace(/<\/?summary>/gi, '').trim();
+    summaryText = summaryText.replace(/<\/?memor(?:y|ies)>/gi, '').trim();
     
     const blocks = [];
 
