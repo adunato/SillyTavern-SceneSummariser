@@ -6,9 +6,14 @@ Scene summarisation captures narrative flow as prose blobs, but individual facts
 
 ## Solution
 
-Extract **discrete memory entries** from the same message window used for scene summarisation, store them as a structured markdown file in the character's SillyTavern Data Bank, and let ST's built-in Vector Storage retrieve them semantically on each generation.
+Extract **discrete memory entries grouped into Memory Blocks** from the same message window used for scene summarisation. A Memory Block is a group of memories related to one or more characters, tied to a short description of the memory event. These blocks are stored as a structured markdown file in the character's SillyTavern Data Bank, letting ST's built-in Vector Storage retrieve them semantically on each generation.
 
 This approach mirrors the one used by the CharMemory extension and intentionally reuses its storage and retrieval interfaces — memories are markdown files with `<memory>` tag blocks registered in `extension_settings.character_attachments`, vectorised automatically by Vector Storage's "Enable for files" setting.
+
+### Key Concepts
+
+*   **Memory Block:** A collection of related memories tied to an event. Defined by a header tag like `* [CharacterA, CharacterB — Event Description]`. A block represents an encounter or scene.
+*   **Character Scope:** Memories are implicitly or explicitly tied to characters. In group chats, a single block may apply to multiple characters (e.g. `[Alex, Flux — adoption day]`). The UI will support filtering/viewing blocks by character.
 
 ---
 
@@ -33,6 +38,9 @@ chatState {
 Memory {
   id:          number
   text:        string         // single atomic fact (also stored in Data Bank file)
+  chatLabel:   string         // Used to link back to the snapshot/scene (e.g. "Scene #1")
+  characters:  string[]       // Characters involved in this memory block
+  blockHeader: string         // The descriptive header of the block (e.g. "[Alex, Flux — event]")
   extractedAt: number         // message index at time of extraction
   createdAt:   number         // ms since epoch
   source:      'extracted' | 'manual'
@@ -44,7 +52,7 @@ Memory {
 Memories are persisted as a markdown file stored in the **chat's** Data Bank (not the character's):
 
 - **File naming:** `ss-memories-<sanitised-chatId>.md`
-- **File format:** `<memory>` tag blocks.
+- **File format:** `<memory>` tag blocks. Each block is formatted to retain the descriptive header and bullets, ensuring it is injected coherently when retrieved.
 
 ---
 
@@ -54,11 +62,13 @@ Memories are persisted as a markdown file stored in the **chat's** Data Bank (no
 
 **Process:**
 
-1. **Combined Prompt**: Build a prompt from `memoryPrompt` template (replaces `summaryPrompt` when `memoryExtractionEnabled = true`).
+1. **Combined Prompt**: Build a prompt from `memoryPrompt` template, providing `{{charName}}` and `{{existingMemories}}`.
 2. **LLM Call**: Call `callSummarisationLLM`.
-3. **Parsing**: Parse response for `<summary>` and `<memories>` tags.
-4. **Combined Review**: Show the new **combined editor popup** containing the editable summary and a list of editable/deletable memory bullets.
-5. **Persistence**: Save approved summary to Snapshots and approved memories to the Data Bank and chat metadata.
+3. **Parsing**: Parse response for `<summary>` and `<memory>` blocks. The parser must recognize the block header (`- [CharA, CharB — description]`) and group subsequent bullets under it.
+4. **Combined Review**: Show the new **combined editor popup**.
+    *   **Memory Blocks**: Blocks are clearly identified with character names and the event description.
+    *   **Actions**: Edit/delete individual bullets, edit the block description, or delete the entire block.
+5. **Persistence**: Save approved summary to Snapshots and approved memories (structured as blocks) to the Data Bank and chat metadata.
 6. **Refresh**: Update UI components.
 
 ---
@@ -68,48 +78,31 @@ Memories are persisted as a markdown file stored in the **chat's** Data Bank (no
 1.  **Combined Review Dialogue**: 
     - Triggered after every manual summarisation. 
     - Displays the summary in a textarea.
-    - Displays a dynamic list of extracted memory bullets.
-    - **Actions**: Users can edit any bullet text or delete a bullet entirely before saving.
+    - Displays extracted memories **grouped by block**. Each block has an editable header (Character/s & Description).
+    - **Actions**: Users can edit any bullet text, delete a bullet, edit the block description, or delete a whole block (including its memories) before saving.
 
-2.  **Unified Settings**: 
+2.  **Memory Management Tab**:
+    - The dedicated **Memory** tab displays the current list of blocks and facts.
+    - **Character Tabs**: The UI must be divided into tabs, one for each character present in the chat (vital for group chats).
+    - **Display**: Memories are displayed under their respective block description headings.
+    - **Actions**: Edit block description, delete whole block, edit individual memory, delete individual memory. Auto-saves changes to the Data Bank.
+
+3.  **Unified Settings**: 
     - Memory extraction configuration (Enable toggle, Prompt, Max memories) is located inside the existing **Settings** tab.
-    - This provides a single location for all "Generation" settings.
-
-3.  **Memory Management Tab**:
-    - The dedicated **Memory** tab is used to display the current list of facts stored for the chat.
-    - **Actions**: Each memory is editable (auto-saves) and deletable. 
-    - Deleting or editing a memory triggers a rewrite of the Data Bank file to maintain consistency with Vector Storage.
 
 ---
 
 ## Combined Extraction Prompt (default)
 
-Template variables: `{{words}}`, `{{summary}}`, `{{last_messages}}`
+Template variables: `{{charName}}`, `{{existingMemories}}`, `{{words}}`, `{{summary}}`, `{{last_messages}}`
 
-```
-Summarize the following scene in {{words}} words or less.
-
-===MESSAGES===
-{{last_messages}}
-===END===
-
-Then extract memorable facts as a bullet list. Each bullet is one specific, atomic fact (a thing that happened, a relationship state, an item, a revealed detail). Write in past tense. Use character names, not pronouns.
-
-Output format — use these exact tags, nothing else:
-
-<summary>
-[scene summary here]
-</summary>
-
-<memories>
-- [fact 1]
-- [fact 2]
-</memories>
-
-If there are no facts worth remembering beyond the summary itself, omit the <memories> block entirely.
-```
+*(The full prompt text is defined in index.js, enforcing the output structure of `<summary>` followed by `<memory>` blocks with `[CharA, CharB — description]` headers and max 5 bullets per block).*
 
 ---
+
+## Injection
+
+Memories will continue to be injected as blocks via Vector Storage retrieval. Because they are saved to the markdown file with their block headers intact, when Vector Storage pulls a chunk, it will pull the cohesive block of facts.
 
 ## Settings Additions (in Settings Tab)
 
@@ -125,4 +118,4 @@ If there are no facts worth remembering beyond the summary itself, omit the <mem
 
 - Active Context Panel (SPEC §4)
 - AI-powered search over memories
-- Per-character memory isolation
+- Per-character memory isolation in storage (Memories are still stored in one file per chat, though the UI will filter them by character).
