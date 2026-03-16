@@ -64,7 +64,7 @@ Settings panel mounted into `#extensions_settings`. Separate collapsible panels 
 
 ---
 
-## 2. New Feature: Memory Extraction
+## 2. New Feature: Memory Extraction [COMPLETE]
 
 ### 2.1 Purpose
 
@@ -127,7 +127,7 @@ ContextEntry {
 
 ---
 
-## 3. New Feature: Active Context Assembly
+## 3. New Feature: Active Context Assembly [PENDING]
 
 ### 3.1 The Update / Rebuild distinction
 
@@ -161,7 +161,7 @@ When `currentMessageIndex > lastSummarisedIndex + nudgeThreshold`, the context p
 
 ---
 
-## 4. New Feature: Context Panel UI
+## 4. New Feature: Context Panel UI [PENDING]
 
 ### 4.1 Panel placement
 
