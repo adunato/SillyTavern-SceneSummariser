@@ -1187,7 +1187,6 @@ async function regenerateSnapshot(snapshot, settings, chatState) {
         .join('\n');
 
     const words = settings.summaryWords || defaultSettings.summaryWords;
-    const promptTemplate = settings.summaryPrompt || defaultSettings.summaryPrompt;
 
     // Fix: Only use summaries prior to this one as context
     const snapshotIndex = chatState.snapshots.findIndex(s => s.id === snapshot.id);
@@ -1200,28 +1199,77 @@ async function regenerateSnapshot(snapshot, settings, chatState) {
 
     const previousSummaryText = previousSnapshots.map(s => `${s.title}: ${s.text}`).join('\n');
 
-    const prompt = promptTemplate
-        .replace('{{words}}', words)
-        .replace('{{summary}}', previousSummaryText || '')
-        .replace('{{last_messages}}', transcript || '(no messages)');
+    // Use combined extraction prompt to ensure memory extraction remains active during regeneration
+    const prompt = buildExtractionPrompt(transcript, settings, previousSummaryText, chatState);
 
     try {
         const result = await callSummarisationLLM(prompt);
-        const { summaryText } = parseExtractionResponse(result || '');
+        const { summaryText, blocks } = parseExtractionResponse(result || '');
         let cleaned = summaryText;
         if (cleaned.startsWith(prompt.trim())) {
             cleaned = cleaned.substring(prompt.trim().length).trim();
         }
 
-        const editedText = await showSummaryEditor(cleaned);
-        if (editedText === null) {
-            logDebug('log', 'User cancelled summary regeneration');
+        // Use the combined editor to allow reviewing both the regenerated summary and memories
+        const editorResult = await showCombinedEditor(cleaned, blocks);
+        if (!editorResult) {
+            logDebug('log', 'User cancelled regeneration editor');
             return;
         }
+
+        const { summary: editedText, blocks: approvedBlocks } = editorResult;
 
         snapshot.text = editedText;
         snapshot.createdAt = Date.now();
         logDebug('log', `Regenerated snapshot ${snapshot.id}`);
+
+        // Handle memory extraction for regenerated snapshot
+        const memoryEnabled = settings.memoryExtractionEnabled ?? defaultSettings.memoryExtractionEnabled;
+        const totalApprovedBullets = approvedBlocks.reduce((sum, b) => sum + b.bullets.length, 0);
+
+        if (memoryEnabled && totalApprovedBullets > 0) {
+            const avatar = ctx?.characters?.[ctx?.characterId]?.avatar
+                || (typeof characters !== 'undefined' ? characters[ctx?.characterId]?.avatar : undefined)
+                || ctx?.avatar;
+
+            if (avatar) {
+                const chatId = getActiveChatId();
+                const fileName = getSSMemoryFileName(chatId);
+                const sceneLabel = snapshot.title;
+                const timestamp = new Date().toISOString().slice(0, 16).replace('T', ' ');
+
+                // Remove old memories associated with this snapshot
+                chatState.memories = chatState.memories.filter(m => m.chatLabel !== sceneLabel);
+
+                let blockMarkdowns = [];
+                let memoriesAdded = 0;
+
+                for (const block of approvedBlocks) {
+                    const bulletsText = `- ${block.header}\n` + block.bullets.map(b => `- ${b}`).join('\n');
+                    const newBlock = `<memory chat="${sceneLabel}" date="${timestamp}">\n${bulletsText}\n</memory>`;
+                    blockMarkdowns.push(newBlock);
+
+                    const newMemories = block.bullets.map(text => ({
+                        id: ++chatState.memoryCounter,
+                        text,
+                        chatLabel: sceneLabel,
+                        blockHeader: block.header,
+                        characters: block.characters,
+                        extractedAt: snapshot.toIndex || 0,
+                        createdAt: Date.now(),
+                        source: 'extracted',
+                    }));
+                    chatState.memories.push(...newMemories);
+                    memoriesAdded += newMemories.length;
+                }
+
+                // Completely rewrite the file to clear out old deleted memories and add the new ones
+                await writeSSMemoriesFile(avatar, fileName, chatState.memories);
+                pruneMemories(chatState, settings);
+
+                logDebug('log', `Regenerated and persisted ${memoriesAdded} memories for ${sceneLabel}`);
+            }
+        }
     } catch (err) {
         console.error(`[${extensionName}] Failed to regenerate snapshot`, err);
         logDebug('error', 'Regenerate failed', err?.message || err);
