@@ -1218,6 +1218,17 @@ async function regenerateSnapshot(snapshot, settings, chatState) {
 }
 
 /**
+ * Wrapper for showCombinedEditor that only returns the summary text.
+ * Used for legacy calls or single-purpose summary editing.
+ * @param {string} initialText 
+ * @returns {Promise<string|null>}
+ */
+async function showSummaryEditor(initialText) {
+    const result = await showCombinedEditor(initialText, []);
+    return result ? result.summary : null;
+}
+
+/**
  * Shows the combined editor popup for reviewing and editing the generated summary and memory blocks.
  * @param {string} initialSummary AI-generated summary.
  * @param {Array<{ header: string, characters: string[], bullets: string[] }>} initialBlocks AI-extracted memory blocks.
