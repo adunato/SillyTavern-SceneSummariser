@@ -182,9 +182,11 @@ async function appendSSMemoriesBlock(avatar, fileName, newBlockMarkdown) {
     }
 
     const existing = await readSSMemoriesFile(avatar, fileName);
+    // Ensure dash formatting even if incoming markdown uses stars
+    const cleanedBlock = newBlockMarkdown.replace(/^\* /gm, '- ');
     const newContent = existing
-        ? `${existing.trimEnd()}\n\n${newBlockMarkdown}`
-        : newBlockMarkdown;
+        ? `${existing.trimEnd()}\n\n${cleanedBlock}`
+        : cleanedBlock;
 
     // Delete old file if present
     const oldAttachment = findSSMemoryAttachment(avatar, fileName);
@@ -231,7 +233,7 @@ async function writeSSMemoriesFile(avatar, fileName, memories) {
         // If no memories, delete the file
         const oldAttachment = findSSMemoryAttachment(avatar, fileName);
         if (oldAttachment) {
-            try { await deleteFileFromServer(oldAttachment.url, true); } catch (_) { /* ignore */ }
+            try { deleteFileFromServer(oldAttachment.url, true); } catch (_) { /* ignore */ }
             extension_settings.character_attachments[avatar] =
                 extension_settings.character_attachments[avatar].filter(a => a.url !== oldAttachment.url);
             saveSettingsDebounced();
@@ -256,7 +258,7 @@ async function writeSSMemoriesFile(avatar, fileName, memories) {
         const timestamp = new Date().toISOString().slice(0, 16).replace('T', ' ');
         let allBulletsText = '';
         for (const [header, texts] of Object.entries(headers)) {
-            allBulletsText += `* ${header}\n` + texts.map(t => `* ${t}`).join('\n') + '\n';
+            allBulletsText += `- ${header}\n` + texts.map(t => `- ${t}`).join('\n') + '\n';
         }
         blocks.push(`<memory chat="${sceneLabel}" date="${timestamp}">\n${allBulletsText.trim()}\n</memory>`);
     }
@@ -1728,7 +1730,8 @@ async function onSummariseClick() {
 
         if (memoryEnabled && totalApprovedBullets > 0) {
             const avatar = ctx?.characters?.[ctx?.characterId]?.avatar
-                || (typeof characters !== 'undefined' ? characters[ctx?.characterId]?.avatar : undefined);
+                || (typeof characters !== 'undefined' ? characters[ctx?.characterId]?.avatar : undefined)
+                || ctx?.avatar; // Fallback to current context avatar
 
             if (avatar) {
                 const chatId = getActiveChatId();
@@ -1743,7 +1746,7 @@ async function onSummariseClick() {
                 let memoriesAdded = 0;
 
                 for (const block of approvedBlocks) {
-                    const bulletsText = `* ${block.header}\n` + block.bullets.map(b => `* ${b}`).join('\n');
+                    const bulletsText = `- ${block.header}\n` + block.bullets.map(b => `- ${b}`).join('\n');
                     const newBlock = `<memory chat="${sceneLabel}" date="${timestamp}">\n${bulletsText}\n</memory>`;
                     blockMarkdowns.push(newBlock);
 
@@ -1967,7 +1970,8 @@ async function onBatchSummariseClick() {
             if (memoryEnabled && totalApprovedBullets > 0) {
                 const batchCtx = getContext();
                 const avatar = batchCtx?.characters?.[batchCtx?.characterId]?.avatar
-                    || (typeof characters !== 'undefined' ? characters[batchCtx?.characterId]?.avatar : undefined);
+                    || (typeof characters !== 'undefined' ? characters[batchCtx?.characterId]?.avatar : undefined)
+                    || batchCtx?.avatar;
 
                 if (avatar) {
                     const chatId = getActiveChatId();
@@ -1980,7 +1984,7 @@ async function onBatchSummariseClick() {
                     let memoriesAdded = 0;
 
                     for (const block of blocks) {
-                        const bulletsText = `* ${block.header}\n` + block.bullets.map(b => `* ${b}`).join('\n');
+                        const bulletsText = `- ${block.header}\n` + block.bullets.map(b => `- ${b}`).join('\n');
                         const newBlock = `<memory chat="${sceneLabel}" date="${timestamp}">\n${bulletsText}\n</memory>`;
                         blockMarkdowns.push(newBlock);
 
