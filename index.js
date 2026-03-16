@@ -304,7 +304,10 @@ function parseExtractionResponse(raw) {
     const summaryMatch = text.match(/<summary>([\s\S]*?)<\/summary>/i);
     const memoryBlocksRaw = [...text.matchAll(/<memor(?:y|ies)>([\s\S]*?)<\/memor(?:y|ies)>/gi)];
 
-    const summaryText = summaryMatch ? summaryMatch[1].trim() : text;
+    let summaryText = summaryMatch ? summaryMatch[1].trim() : text;
+    // Strip any residual or malformed tags
+    summaryText = summaryText.replace(/<\/?summary>/gi, '').trim();
+    
     const blocks = [];
 
     for (const blockMatch of memoryBlocksRaw) {
@@ -1197,7 +1200,8 @@ async function regenerateSnapshot(snapshot, settings, chatState) {
 
     try {
         const result = await callSummarisationLLM(prompt);
-        let cleaned = (result || '').trim();
+        const { summaryText } = parseExtractionResponse(result || '');
+        let cleaned = summaryText;
         if (cleaned.startsWith(prompt.trim())) {
             cleaned = cleaned.substring(prompt.trim().length).trim();
         }
@@ -2153,7 +2157,8 @@ async function onConsolidateClick() {
             + `\n\nScenes to consolidate:\n${summariesText}`;
 
         const result = await callSummarisationLLM(prompt, currentAbortController.signal);
-        let cleaned = (result || '').trim();
+        const { summaryText } = parseExtractionResponse(result || '');
+        let cleaned = summaryText;
         if (cleaned.startsWith(prompt.trim())) {
             cleaned = cleaned.substring(prompt.trim().length).trim();
         }
