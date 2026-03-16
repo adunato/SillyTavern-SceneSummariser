@@ -176,6 +176,7 @@ async function readSSMemoriesFile(avatar, fileName) {
  * @param {string} newBlockMarkdown
  */
 async function appendSSMemoriesBlock(avatar, fileName, newBlockMarkdown) {
+    console.log(`[${extensionName}] appendSSMemoriesBlock called for avatar: ${avatar}, fileName: ${fileName}`);
     if (!extension_settings.character_attachments) extension_settings.character_attachments = {};
     if (!Array.isArray(extension_settings.character_attachments[avatar])) {
         extension_settings.character_attachments[avatar] = [];
@@ -188,9 +189,12 @@ async function appendSSMemoriesBlock(avatar, fileName, newBlockMarkdown) {
         ? `${existing.trimEnd()}\n\n${cleanedBlock}`
         : cleanedBlock;
 
+    console.log(`[${extensionName}] appendSSMemoriesBlock: newContent length: ${newContent.length}`);
+
     // Delete old file if present
     const oldAttachment = findSSMemoryAttachment(avatar, fileName);
     if (oldAttachment) {
+        console.log(`[${extensionName}] appendSSMemoriesBlock: deleting old attachment at ${oldAttachment.url}`);
         try { await deleteFileFromServer(oldAttachment.url, true); } catch (_) { /* ignore */ }
         extension_settings.character_attachments[avatar] =
             extension_settings.character_attachments[avatar].filter(a => a.url !== oldAttachment.url);
@@ -202,9 +206,12 @@ async function appendSSMemoriesBlock(avatar, fileName, newBlockMarkdown) {
     const uniqueFileName = `${Date.now()}_${slug}.txt`;
     const fileUrl = await uploadFileAttachment(uniqueFileName, base64Data);
     if (!fileUrl) {
+        console.error(`[${extensionName}] appendSSMemoriesBlock: uploadFileAttachment returned no URL`);
         logDebug('error', 'appendSSMemoriesBlock: uploadFileAttachment returned no URL');
         return;
     }
+
+    console.log(`[${extensionName}] appendSSMemoriesBlock: uploaded new file to ${fileUrl}`);
 
     extension_settings.character_attachments[avatar].push({
         url: fileUrl,
@@ -214,6 +221,7 @@ async function appendSSMemoriesBlock(avatar, fileName, newBlockMarkdown) {
     });
     saveSettingsDebounced();
     logDebug('log', `Memory file updated: ${fileName} (${newContent.length} bytes)`);
+    console.log(`[${extensionName}] appendSSMemoriesBlock: state updated. Total attachments for avatar: ${extension_settings.character_attachments[avatar].length}`);
 }
 
 /**
@@ -224,6 +232,7 @@ async function appendSSMemoriesBlock(avatar, fileName, newBlockMarkdown) {
  * @param {object[]} memories List of memory objects from chatState.
  */
 async function writeSSMemoriesFile(avatar, fileName, memories) {
+    console.log(`[${extensionName}] writeSSMemoriesFile called for avatar: ${avatar}, fileName: ${fileName}, memories count: ${memories.length}`);
     if (!extension_settings.character_attachments) extension_settings.character_attachments = {};
     if (!Array.isArray(extension_settings.character_attachments[avatar])) {
         extension_settings.character_attachments[avatar] = [];
@@ -233,6 +242,7 @@ async function writeSSMemoriesFile(avatar, fileName, memories) {
         // If no memories, delete the file
         const oldAttachment = findSSMemoryAttachment(avatar, fileName);
         if (oldAttachment) {
+            console.log(`[${extensionName}] writeSSMemoriesFile: deleting empty attachment at ${oldAttachment.url}`);
             try { deleteFileFromServer(oldAttachment.url, true); } catch (_) { /* ignore */ }
             extension_settings.character_attachments[avatar] =
                 extension_settings.character_attachments[avatar].filter(a => a.url !== oldAttachment.url);
@@ -264,10 +274,12 @@ async function writeSSMemoriesFile(avatar, fileName, memories) {
     }
 
     const newContent = blocks.join('\n\n');
+    console.log(`[${extensionName}] writeSSMemoriesFile: generated newContent length: ${newContent.length}`);
 
     // Delete old file
     const oldAttachment = findSSMemoryAttachment(avatar, fileName);
     if (oldAttachment) {
+        console.log(`[${extensionName}] writeSSMemoriesFile: deleting old attachment at ${oldAttachment.url}`);
         try { await deleteFileFromServer(oldAttachment.url, true); } catch (_) { /* ignore */ }
         extension_settings.character_attachments[avatar] =
             extension_settings.character_attachments[avatar].filter(a => a.url !== oldAttachment.url);
@@ -279,9 +291,12 @@ async function writeSSMemoriesFile(avatar, fileName, memories) {
     const uniqueFileName = `${Date.now()}_${slug}.txt`;
     const fileUrl = await uploadFileAttachment(uniqueFileName, base64Data);
     if (!fileUrl) {
+        console.error(`[${extensionName}] writeSSMemoriesFile: uploadFileAttachment returned no URL`);
         logDebug('error', 'writeSSMemoriesFile: uploadFileAttachment returned no URL');
         return;
     }
+
+    console.log(`[${extensionName}] writeSSMemoriesFile: uploaded new file to ${fileUrl}`);
 
     extension_settings.character_attachments[avatar].push({
         url: fileUrl,
@@ -291,6 +306,7 @@ async function writeSSMemoriesFile(avatar, fileName, memories) {
     });
     saveSettingsDebounced();
     logDebug('log', `Memory file rebuilt: ${fileName} (${newContent.length} bytes)`);
+    console.log(`[${extensionName}] writeSSMemoriesFile: state updated. Total attachments for avatar: ${extension_settings.character_attachments[avatar].length}`);
 }
 
 // ============ Memory Extraction — Response Parser (§2) ============
