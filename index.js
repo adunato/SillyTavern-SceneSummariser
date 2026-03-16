@@ -47,40 +47,61 @@ const defaultSettings = {
     summaryHistoryDepth: 0, // 0 = all
     // Memory extraction (§2)
     memoryExtractionEnabled: true,
-    memoryPrompt: `You are a context manager. First, summarize the following scene in {{words}} words or less, capturing the narrative flow.
+    memoryPrompt: `You are an assistant tasked with updating a story's progression by summarizing recent events and extracting significant long-term character memories.
 
-===MESSAGES===
+===== CONTEXT & INPUTS =====
+Character Name: {{charName}}
+Existing Memories (Do not repeat or remix): {{existingMemories}}
+
+# ===== RECENT MESSAGES (Summarize and extract ONLY from here) =====
 {{last_messages}}
-===END===
 
-Then, extract the most significant facts, events, and developments worth remembering long-term as a bullet list.
+===== UNIFIED OUTPUT FORMATTING INSTRUCTION =====
+Your output must contain exactly two components, in this exact order, with absolutely NO conversational filler, headers, or commentary:
 
-INSTRUCTIONS FOR MEMORIES:
-1. Extract only NEW facts, relationship changes, or significant character developments.
-2. Write in past tense, third person. Always refer to characters by name, not "she/he/they". Do NOT quote dialogue verbatim.
-3. Write about WHAT HAPPENED, not about the conversation itself. Never write "she told him about X" — instead write the actual fact: "X happened".
-4. Start the first bullet with a topic tag: "- [CharacterA, CharacterB — short description]". ALWAYS include the main characters first.
-5. HARD LIMIT: No more than 5 bullet points. Keep only the most significant outcomes.
+1. A single <summary> block containing the plot summary.
+2. One or more <memory> blocks containing bulleted lists of extracted memories (or exactly NO_NEW_MEMORIES inside a single block if nothing significant occurred).
 
-DO NOT EXTRACT AS MEMORIES:
-- Step-by-step accounts of what happened (summarize outcomes, not processes).
-- Individual actions, movements, or temporary physical states (e.g. "leaned against him", "walked to the door").
-- Scene-setting details (room descriptions, weather, clothing).
-- Paraphrased dialogue or conversation filler.
-
-Output format — use these exact tags, nothing else:
+Example Output Structure:
 
 <summary>
-[scene summary here]
+Raw summary text goes here...
 </summary>
+<memory>
+* [{{charName}}, OtherNames — short description]
+* Memory bullet 1
+* Memory bullet 2
+</memory>
 
-<memories>
-- [CharacterA, CharacterB — short topic label]
-- [fact 1]
-- [fact 2]
-</memories>
+===== SUMMARY RULES =====
+1. Summarize ONLY the events in 'Recent Messages'. Focus strictly on plot progression and meaningful actions.
+2. Do NOT recap the 'Story Context' and DO NOT continue the story.
+3. Assume the reader is already familiar with the characters (e.g., use "Mary" rather than "Mary, a caring mother").
+4. Limit the summary text to {{words}} words.
 
-If there are no lasting facts worth remembering beyond the summary itself, omit the <memories> block entirely.`,
+===== MEMORY EXTRACTION RULES =====
+1. Extract only NEW facts, backstory reveals, relationship shifts, and emotional turning points NOT already covered by 'Existing Memories'.
+2. Write in past tense, third person. Always refer to {{charName}} by name. No emojis. Do not quote dialogue verbatim.
+3. Write about WHAT HAPPENED (outcomes), not the conversation itself or the step-by-step process. Never write "she told him about X" — write the actual fact: "X happened".
+4. Group memories by encounter. Use ONE <memory> block per encounter/scene.
+5. Start each block with a topic tag as the first bullet: "- [{{charName}}, OtherNames — short description]".
+6. HARD LIMIT: Max 5 bullet points per block (excluding the topic tag). Keep only the most significant outcomes.
+7. DO NOT EXTRACT: Meta-narration, step-by-step accounts, scene-setting, temporary physical states, or trivial details. Ask yourself: "Would {{charName}} bring this up unprompted weeks later?"
+
+NEGATIVE MEMORY EXAMPLE (Do NOT write play-by-play like this):
+<memory>
+* Alex set the carrier down and opened the door.
+* Flux emerged and walked toward the Roomba.
+* Alex poured salmon pâté into a bowl.
+* Flux ate the salmon and purred.
+</memory>
+
+POSITIVE MEMORY EXAMPLE (Summarize the outcome):
+<memory>
+* [Alex, Flux — adoption day and settling in]
+* Alex adopted Flux, who immediately bonded with a custom Roomba in the apartment.
+* Flux's first meal of premium salmon pâté triggered his first purr in the new home.
+</memory>`,
     maxMemories: 0, // 0 = unlimited
 };
 
@@ -273,15 +294,19 @@ async function writeSSMemoriesFile(avatar, fileName, memories) {
 function parseExtractionResponse(raw) {
     const text = (raw || '').trim();
     const summaryMatch = text.match(/<summary>([\s\S]*?)<\/summary>/i);
-    const memoriesMatch = text.match(/<memories>([\s\S]*?)<\/memories>/i);
+    const memoryBlocks = [...text.matchAll(/<memor(?:y|ies)>([\s\S]*?)<\/memor(?:y|ies)>/gi)];
 
     const summaryText = summaryMatch ? summaryMatch[1].trim() : text;
 
     const bullets = [];
-    if (memoriesMatch) {
-        for (const line of memoriesMatch[1].split('\n')) {
+    for (const block of memoryBlocks) {
+        for (const line of block[1].split('\n')) {
             const trimmed = line.trim();
-            if (trimmed.startsWith('- ')) bullets.push(trimmed.slice(2).trim());
+            // Ignore NO_NEW_MEMORIES or similar single-line statements
+            if (trimmed === 'NO_NEW_MEMORIES') continue;
+            if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
+                bullets.push(trimmed.slice(2).trim());
+            }
         }
     }
     return { summaryText, bullets };
@@ -296,19 +321,28 @@ function parseExtractionResponse(raw) {
  * @param {string} transcript Chat transcript text.
  * @param {object} settings Extension settings.
  * @param {string} previousSummaryText Concatenated previous snapshot texts.
+ * @param {object} [chatState={}] The current chat state to extract existing memories.
  * @returns {string}
  */
-function buildExtractionPrompt(transcript, settings, previousSummaryText) {
+function buildExtractionPrompt(transcript, settings, previousSummaryText, chatState = {}) {
+    const ctx = getContext();
+    const charName = ctx?.name2 || 'Character';
     const words = settings.summaryWords || defaultSettings.summaryWords;
     const enabled = settings.memoryExtractionEnabled ?? defaultSettings.memoryExtractionEnabled;
     const template = enabled
         ? (settings.memoryPrompt || defaultSettings.memoryPrompt)
         : (settings.summaryPrompt || defaultSettings.summaryPrompt);
 
+    const existingMemories = (chatState.memories && chatState.memories.length > 0)
+        ? chatState.memories.map(m => `- ${m.text}`).join('\n')
+        : 'None';
+
     return template
         .replace(/\{\{words\}\}/g, words)
         .replace(/\{\{summary\}\}/g, previousSummaryText || '')
-        .replace(/\{\{last_messages\}\}/g, transcript || '(no messages)');
+        .replace(/\{\{last_messages\}\}/g, transcript || '(no messages)')
+        .replace(/\{\{charName\}\}/g, charName)
+        .replace(/\{\{existingMemories\}\}/g, existingMemories);
 }
 
 /**
@@ -1381,7 +1415,7 @@ async function onSummariseClick() {
         .join('\n');
 
     // Use combined extraction prompt (or legacy summary-only prompt if extraction is disabled)
-    const prompt = buildExtractionPrompt(transcript, settings, previousSummaryText);
+    const prompt = buildExtractionPrompt(transcript, settings, previousSummaryText, chatState);
 
     try {
         const rawResult = await callSummarisationLLM(prompt, currentAbortController.signal);
