@@ -124,6 +124,7 @@ let isSummarising = false;
 let currentAbortController = null;
 let debugMessages = [];
 let settingsContainer = null;
+let currentMemoryTab = 'All';
 
 
 // ============ Memory Extraction — Data Bank Helpers (§2) ============
@@ -238,19 +239,26 @@ async function writeSSMemoriesFile(avatar, fileName, memories) {
         return;
     }
 
-    // Group memories by scene label if possible, or use a default
+    // Group memories by scene label and then by block header
     const blocks = [];
     const grouped = {};
     for (const m of memories) {
-        const label = m.chatLabel || 'Memory Index';
-        if (!grouped[label]) grouped[label] = [];
-        grouped[label].push(m.text);
+        const sceneLabel = m.chatLabel || 'Memory Index';
+        const blockHeader = m.blockHeader || '[General]';
+        
+        if (!grouped[sceneLabel]) grouped[sceneLabel] = {};
+        if (!grouped[sceneLabel][blockHeader]) grouped[sceneLabel][blockHeader] = [];
+        
+        grouped[sceneLabel][blockHeader].push(m.text);
     }
 
-    for (const [label, texts] of Object.entries(grouped)) {
+    for (const [sceneLabel, headers] of Object.entries(grouped)) {
         const timestamp = new Date().toISOString().slice(0, 16).replace('T', ' ');
-        const bulletsText = texts.map(t => `- ${t}`).join('\n');
-        blocks.push(`<memory chat="${label}" date="${timestamp}">\n${bulletsText}\n</memory>`);
+        let allBulletsText = '';
+        for (const [header, texts] of Object.entries(headers)) {
+            allBulletsText += `* ${header}\n` + texts.map(t => `* ${t}`).join('\n') + '\n';
+        }
+        blocks.push(`<memory chat="${sceneLabel}" date="${timestamp}">\n${allBulletsText.trim()}\n</memory>`);
     }
 
     const newContent = blocks.join('\n\n');
@@ -286,30 +294,74 @@ async function writeSSMemoriesFile(avatar, fileName, memories) {
 // ============ Memory Extraction — Response Parser (§2) ============
 
 /**
- * Parses a combined LLM extraction response into summary text and memory bullet strings.
+ * Parses a combined LLM extraction response into summary text and memory blocks.
  * Falls back to treating the whole response as summaryText when tags are absent.
  * @param {string} raw Raw LLM response.
- * @returns {{ summaryText: string, bullets: string[] }}
+ * @returns {{ summaryText: string, blocks: Array<{ header: string, characters: string[], bullets: string[] }> }}
  */
 function parseExtractionResponse(raw) {
     const text = (raw || '').trim();
     const summaryMatch = text.match(/<summary>([\s\S]*?)<\/summary>/i);
-    const memoryBlocks = [...text.matchAll(/<memor(?:y|ies)>([\s\S]*?)<\/memor(?:y|ies)>/gi)];
+    const memoryBlocksRaw = [...text.matchAll(/<memor(?:y|ies)>([\s\S]*?)<\/memor(?:y|ies)>/gi)];
 
     const summaryText = summaryMatch ? summaryMatch[1].trim() : text;
+    const blocks = [];
 
-    const bullets = [];
-    for (const block of memoryBlocks) {
-        for (const line of block[1].split('\n')) {
-            const trimmed = line.trim();
-            // Ignore NO_NEW_MEMORIES or similar single-line statements
-            if (trimmed === 'NO_NEW_MEMORIES') continue;
-            if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
-                bullets.push(trimmed.slice(2).trim());
+    for (const blockMatch of memoryBlocksRaw) {
+        const lines = blockMatch[1].split('\n').map(l => l.trim()).filter(l => l);
+        if (lines.length === 0 || lines.some(l => l === 'NO_NEW_MEMORIES')) continue;
+
+        let currentBlock = null;
+
+        for (const line of lines) {
+            if (line.startsWith('- ') || line.startsWith('* ')) {
+                const bulletText = line.slice(2).trim();
+                
+                // Check if this bullet is a header: starts with [
+                if (bulletText.startsWith('[')) {
+                    // Start a new block
+                    if (currentBlock && currentBlock.bullets.length > 0) {
+                        blocks.push(currentBlock);
+                    }
+                    
+                    let characters = [];
+                    const bracketMatch = bulletText.match(/^\[(.*?)\]/);
+                    if (bracketMatch) {
+                        const inside = bracketMatch[1];
+                        const charPart = inside.split(/—|-/)[0]; // get text before the dash
+                        if (charPart) {
+                            characters = charPart.split(',').map(c => c.trim()).filter(c => c);
+                        }
+                    }
+
+                    currentBlock = {
+                        header: bulletText,
+                        characters: characters,
+                        bullets: []
+                    };
+                    continue;
+                }
+                
+                // If it's not a header, add to current block
+                if (currentBlock) {
+                    currentBlock.bullets.push(bulletText);
+                } else {
+                    // Fallback for bullets without a header
+                    currentBlock = {
+                        header: '[General]',
+                        characters: [],
+                        bullets: [bulletText]
+                    };
+                }
             }
         }
+        
+        if (currentBlock && currentBlock.bullets.length > 0) {
+            blocks.push(currentBlock);
+        }
     }
-    return { summaryText, bullets };
+    
+    return { summaryText, blocks };
 }
 
 // ============ Memory Extraction — Prompt Builder (§2) ============
@@ -739,22 +791,78 @@ function bindSettingsUI(container) {
                 saveSettingsDebounced();
             }
         }
+
+        const deleteBlockBtn = event.target.closest('.ss-delete-full-block');
+        if (deleteBlockBtn) {
+            const headerToDelete = deleteBlockBtn.dataset.header;
+            if (confirm(`Delete the entire block "${headerToDelete}"?`)) {
+                const chatState = getChatState();
+                chatState.memories = chatState.memories.filter(m => m.blockHeader !== headerToDelete);
+                
+                const ctx = getContext();
+                const avatar = ctx?.characters?.[ctx?.characterId]?.avatar
+                    || (typeof characters !== 'undefined' ? characters[ctx?.characterId]?.avatar : undefined);
+                if (avatar) {
+                    const fileName = getSSMemoryFileName(getActiveChatId());
+                    await writeSSMemoriesFile(avatar, fileName, chatState.memories);
+                }
+                renderMemoriesList(container, chatState);
+                saveSettingsDebounced();
+            }
+        }
     });
 
-    // 2b) Auto-save memory text
+    // 2b) Auto-save memory text and block headers
     container.addEventListener('input', (event) => {
-        if (!event.target.classList.contains('ss-memory-text')) return;
-        const id = Number(event.target.dataset.id);
-        const chatState = getChatState();
-        const memory = chatState.memories.find(m => m.id === id);
-        if (memory) {
-            memory.text = event.target.value;
-            saveSettingsDebounced();
+        if (event.target.classList.contains('ss-memory-text')) {
+            const id = Number(event.target.dataset.id);
+            const chatState = getChatState();
+            const memory = chatState.memories.find(m => m.id === id);
+            if (memory) {
+                memory.text = event.target.value;
+                saveSettingsDebounced();
+                
+                clearTimeout(memory.rewriteTimeout);
+                memory.rewriteTimeout = setTimeout(async () => {
+                    const ctx = getContext();
+                    const avatar = ctx?.characters?.[ctx?.characterId]?.avatar
+                        || (typeof characters !== 'undefined' ? characters[ctx?.characterId]?.avatar : undefined);
+                    if (avatar) {
+                        const fileName = getSSMemoryFileName(getActiveChatId());
+                        await writeSSMemoriesFile(avatar, fileName, chatState.memories);
+                    }
+                }, 2000);
+            }
+            return;
+        }
+
+        if (event.target.classList.contains('ss-memory-block-header')) {
+            const originalHeader = event.target.dataset.originalHeader;
+            const newHeader = event.target.value.trim() || '[Unknown]';
+            const chatState = getChatState();
             
-            // Rewrite file on a debounce or after blur to avoid spamming the server
-            // For now, we'll use a simple debounce on the file write
-            clearTimeout(memory.rewriteTimeout);
-            memory.rewriteTimeout = setTimeout(async () => {
+            let characters = [];
+            const bracketMatch = newHeader.match(/^\[(.*?)\]/);
+            if (bracketMatch) {
+                const inside = bracketMatch[1];
+                const charPart = inside.split(/—|-/)[0]; // get text before the dash
+                if (charPart) {
+                    characters = charPart.split(',').map(c => c.trim()).filter(c => c);
+                }
+            }
+
+            chatState.memories.forEach(m => {
+                if (m.blockHeader === originalHeader) {
+                    m.blockHeader = newHeader;
+                    m.characters = characters;
+                }
+            });
+            event.target.dataset.originalHeader = newHeader; // update original to allow continuous editing
+            saveSettingsDebounced();
+
+            // Store rewriteTimeout on the chatState object to debounce across the whole file
+            clearTimeout(chatState.headerRewriteTimeout);
+            chatState.headerRewriteTimeout = setTimeout(async () => {
                 const ctx = getContext();
                 const avatar = ctx?.characters?.[ctx?.characterId]?.avatar
                     || (typeof characters !== 'undefined' ? characters[ctx?.characterId]?.avatar : undefined);
@@ -763,11 +871,10 @@ function bindSettingsUI(container) {
                     await writeSSMemoriesFile(avatar, fileName, chatState.memories);
                 }
             }, 2000);
+            return;
         }
-    });
 
-    // Debug controls
-    container.querySelector('#ss_copyLogs')?.addEventListener('click', async () => {
+        if (!event.target.classList.contains('ss-snap-text')) return;
         const text = debugMessages.join('\n');
         try {
             await navigator.clipboard.writeText(text);
@@ -1092,12 +1199,12 @@ async function regenerateSnapshot(snapshot, settings, chatState) {
 }
 
 /**
- * Shows the combined editor popup for reviewing and editing the generated summary and memory bullets.
+ * Shows the combined editor popup for reviewing and editing the generated summary and memory blocks.
  * @param {string} initialSummary AI-generated summary.
- * @param {string[]} initialBullets AI-extracted memory bullets.
- * @returns {Promise<{ summary: string, memories: string[] }|null>} Final edited data, or null if cancelled.
+ * @param {Array<{ header: string, characters: string[], bullets: string[] }>} initialBlocks AI-extracted memory blocks.
+ * @returns {Promise<{ summary: string, blocks: Array<{ header: string, characters: string[], bullets: string[] }> }|null>} Final edited data, or null if cancelled.
  */
-async function showCombinedEditor(initialSummary, initialBullets) {
+async function showCombinedEditor(initialSummary, initialBlocks) {
     const template = $(await renderExtensionTemplateAsync(`third-party/${extensionName}`, 'popup'));
     const summaryArea = template.find('#ssPopupTextarea');
     const memoriesList = template.find('#ssPopupMemoriesList');
@@ -1105,40 +1212,69 @@ async function showCombinedEditor(initialSummary, initialBullets) {
 
     summaryArea.val(initialSummary);
 
-    const renderMemoryItem = (text = '') => {
-        const item = $(`
-            <div class="ss-memory-edit-item">
-                <textarea class="text_pole" placeholder="Enter a fact...">${text}</textarea>
-                <i class="fa-solid fa-trash-can ss-delete-icon ss-action-icon" title="Remove fact"></i>
-            </div>
-        `);
-        item.find('.ss-delete-icon').on('click', () => {
-            item.remove();
-            if (memoriesList.children().length === 0) {
-                memoriesList.append('<div class="ss-empty-hint" style="text-align:center; padding:10px; opacity:0.6;">No facts extracted.</div>');
-            }
-        });
-        return item;
-    };
-
     const refreshEmptyHint = () => {
         memoriesList.find('.ss-empty-hint').remove();
-        if (memoriesList.children().length === 0) {
+        if (memoriesList.children('.ss-memory-block-item').length === 0) {
             memoriesList.append('<div class="ss-empty-hint" style="text-align:center; padding:10px; opacity:0.6;">No facts extracted.</div>');
         }
     };
 
-    if (Array.isArray(initialBullets) && initialBullets.length) {
-        initialBullets.forEach(b => memoriesList.append(renderMemoryItem(b)));
+    const renderMemoryBlock = (blockData = { header: '[Character — topic]', characters: [], bullets: [''] }) => {
+        const blockEl = $(`
+            <div class="ss-memory-block-item" style="border: 1px solid var(--grey40); border-radius: 5px; padding: 5px; margin-bottom: 8px; background: var(--grey30);">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 5px;">
+                    <input type="text" class="text_pole ss-block-header-input" value="${blockData.header.replace(/"/g, '&quot;')}" style="flex: 1; font-weight: bold;" />
+                    <i class="fa-solid fa-trash-can ss-delete-icon ss-action-icon ss-delete-block" title="Remove entire block" style="margin-left: 5px;"></i>
+                </div>
+                <div class="ss-block-bullets"></div>
+                <button class="menu_button interactable ss-add-bullet-btn" style="font-size: 0.7em; padding: 2px 6px; margin-top: 5px;">
+                    <i class="fa-solid fa-plus"></i> Add Fact
+                </button>
+            </div>
+        `);
+
+        const bulletsContainer = blockEl.find('.ss-block-bullets');
+
+        const renderBulletItem = (text = '') => {
+            const item = $(`
+                <div class="ss-memory-edit-item" style="margin-bottom: 3px;">
+                    <textarea class="text_pole" placeholder="Enter a fact...">${text}</textarea>
+                    <i class="fa-solid fa-trash-can ss-delete-icon ss-action-icon ss-delete-bullet" title="Remove fact"></i>
+                </div>
+            `);
+            item.find('.ss-delete-bullet').on('click', () => {
+                item.remove();
+            });
+            return item;
+        };
+
+        (blockData.bullets || []).forEach(b => bulletsContainer.append(renderBulletItem(b)));
+
+        blockEl.find('.ss-add-bullet-btn').on('click', () => {
+            const newItem = renderBulletItem();
+            bulletsContainer.append(newItem);
+            newItem.find('textarea').focus();
+        });
+
+        blockEl.find('.ss-delete-block').on('click', () => {
+            blockEl.remove();
+            refreshEmptyHint();
+        });
+
+        return blockEl;
+    };
+
+    if (Array.isArray(initialBlocks) && initialBlocks.length) {
+        initialBlocks.forEach(b => memoriesList.append(renderMemoryBlock(b)));
     } else {
         refreshEmptyHint();
     }
 
     addBtn.on('click', () => {
         memoriesList.find('.ss-empty-hint').remove();
-        const item = renderMemoryItem();
-        memoriesList.append(item);
-        item.find('textarea').focus();
+        const blockEl = renderMemoryBlock();
+        memoriesList.append(blockEl);
+        blockEl.find('input').focus();
     });
 
     const popup = new Popup(template, POPUP_TYPE.CONFIRM, '', {
@@ -1152,20 +1288,44 @@ async function showCombinedEditor(initialSummary, initialBullets) {
     if (!result) return null;
 
     const finalSummary = String(summaryArea.val()).trim();
-    const finalMemories = [];
-    memoriesList.find('textarea').each(function () {
-        const val = $(this).val().trim();
-        if (val) finalMemories.push(val);
+    const finalBlocks = [];
+
+    memoriesList.find('.ss-memory-block-item').each(function () {
+        const blockEl = $(this);
+        const header = String(blockEl.find('.ss-block-header-input').val()).trim() || '[Unknown — Event]';
+        
+        let characters = [];
+        const bracketMatch = header.match(/^\[(.*?)\]/);
+        if (bracketMatch) {
+            const inside = bracketMatch[1];
+            const charPart = inside.split(/—|-/)[0]; // get text before the dash
+            if (charPart) {
+                characters = charPart.split(',').map(c => c.trim()).filter(c => c);
+            }
+        }
+
+        const bullets = [];
+        blockEl.find('textarea').each(function () {
+            const val = $(this).val().trim();
+            if (val) bullets.push(val);
+        });
+
+        if (bullets.length > 0) {
+            finalBlocks.push({ header, characters, bullets });
+        }
     });
 
-    return { summary: finalSummary, memories: finalMemories };
+    return { summary: finalSummary, blocks: finalBlocks };
 }
 
 function renderMemoriesList(container, chatState) {
     const list = container?.querySelector('#ss_memories_list');
+    const tabsContainer = container?.querySelector('#ss_memory_tabs');
     const emptyState = container?.querySelector('#ss_memories_empty_state');
-    if (!list) return;
+    if (!list || !tabsContainer) return;
+    
     list.innerHTML = '';
+    tabsContainer.innerHTML = '';
     const memories = chatState?.memories || [];
 
     if (!memories.length) {
@@ -1175,17 +1335,85 @@ function renderMemoriesList(container, chatState) {
         emptyState.style.display = 'none';
     }
 
-    // Newest first
-    [...memories].reverse().forEach((m) => {
-        const item = document.createElement('div');
-        item.className = 'ss-memory-edit-item';
-        item.style.marginBottom = '5px';
-        item.innerHTML = `
-            <textarea class="text_pole ss-memory-text" data-id="${m.id}" rows="2">${m.text || ''}</textarea>
-            <i class="menu_button fa-solid fa-trash-can ss-delete-icon ss-action-icon" title="Delete Memory" data-memory-action="delete" data-memory-id="${m.id}"></i>
-        `;
-        list.appendChild(item);
+    // Extract unique characters
+    const charSet = new Set();
+    memories.forEach(m => {
+        if (m.characters && Array.isArray(m.characters)) {
+            m.characters.forEach(c => charSet.add(c));
+        }
     });
+    const uniqueChars = Array.from(charSet).sort();
+
+    // Render Tabs
+    const renderTabButton = (name) => {
+        const btn = document.createElement('button');
+        btn.className = `menu_button interactable ${currentMemoryTab === name ? 'fa-solid fa-check' : ''}`;
+        btn.textContent = name;
+        btn.style.padding = '4px 8px';
+        btn.style.fontSize = '0.9em';
+        if (currentMemoryTab === name) {
+            btn.style.background = 'var(--smart-theme-focus)';
+            btn.style.color = 'var(--smart-theme-focus-text)';
+        }
+        btn.addEventListener('click', () => {
+            currentMemoryTab = name;
+            renderMemoriesList(container, chatState);
+        });
+        tabsContainer.appendChild(btn);
+    };
+
+    renderTabButton('All');
+    uniqueChars.forEach(c => renderTabButton(c));
+
+    // Filter memories by tab
+    let filteredMemories = memories;
+    if (currentMemoryTab !== 'All') {
+        filteredMemories = memories.filter(m => m.characters && m.characters.includes(currentMemoryTab));
+    }
+
+    if (filteredMemories.length === 0) {
+        list.innerHTML = `<div style="text-align:center; opacity:0.6; padding:10px;">No memories for ${currentMemoryTab}</div>`;
+        return;
+    }
+
+    // Group by blockHeader
+    const grouped = {};
+    [...filteredMemories].reverse().forEach(m => {
+        const header = m.blockHeader || '[General]';
+        if (!grouped[header]) grouped[header] = [];
+        grouped[header].push(m);
+    });
+
+    for (const [header, blockMemories] of Object.entries(grouped)) {
+        const blockEl = document.createElement('div');
+        blockEl.style.border = '1px solid var(--grey40)';
+        blockEl.style.borderRadius = '5px';
+        blockEl.style.padding = '5px';
+        blockEl.style.background = 'var(--grey30)';
+        
+        let headerHtml = `
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
+                <input type="text" class="text_pole ss-memory-block-header" data-original-header="${header.replace(/"/g, '&quot;')}" value="${header.replace(/"/g, '&quot;')}" style="flex:1; font-weight:bold; background:transparent; border:none; border-bottom:1px solid var(--grey50); margin-right:5px;"/>
+                <i class="fa-solid fa-trash-can ss-delete-icon ss-action-icon ss-delete-full-block" title="Delete entire block" data-header="${header.replace(/"/g, '&quot;')}"></i>
+            </div>
+            <div class="ss-block-items"></div>
+        `;
+        blockEl.innerHTML = headerHtml;
+        const itemsContainer = blockEl.querySelector('.ss-block-items');
+
+        blockMemories.forEach(m => {
+            const item = document.createElement('div');
+            item.className = 'ss-memory-edit-item';
+            item.style.marginBottom = '3px';
+            item.innerHTML = `
+                <textarea class="text_pole ss-memory-text" data-id="${m.id}" rows="2">${m.text || ''}</textarea>
+                <i class="menu_button fa-solid fa-trash-can ss-delete-icon ss-action-icon" title="Delete Memory" data-memory-action="delete" data-memory-id="${m.id}"></i>
+            `;
+            itemsContainer.appendChild(item);
+        });
+        
+        list.appendChild(blockEl);
+    }
 }
 
 /**
@@ -1420,21 +1648,21 @@ async function onSummariseClick() {
     try {
         const rawResult = await callSummarisationLLM(prompt, currentAbortController.signal);
         // Parse combined response — falls back gracefully to summary-only if tags are absent
-        const { summaryText, bullets } = parseExtractionResponse(rawResult || '');
+        const { summaryText, blocks } = parseExtractionResponse(rawResult || '');
         let cleaned = summaryText;
         if (cleaned.startsWith(prompt.trim())) {
             cleaned = cleaned.substring(prompt.trim().length).trim();
         }
         logDebug('log', 'LLM summary result', cleaned);
-        logDebug('log', `Memory bullets extracted: ${bullets.length}`);
+        logDebug('log', `Memory blocks extracted: ${blocks ? blocks.length : 0}`);
 
-        const result = await showCombinedEditor(cleaned, bullets);
+        const result = await showCombinedEditor(cleaned, blocks);
         if (!result) {
             logDebug('log', 'User cancelled combined editor');
             return;
         }
 
-        const { summary: editedText, memories: approvedMemories } = result;
+        const { summary: editedText, blocks: approvedBlocks } = result;
 
         // Update stored snapshot list
         const words = settings.summaryWords || defaultSettings.summaryWords;
@@ -1457,7 +1685,9 @@ async function onSummariseClick() {
 
         // --- Memory Extraction (§2): persist approved memories to Data Bank ---
         const memoryEnabled = settings.memoryExtractionEnabled ?? defaultSettings.memoryExtractionEnabled;
-        if (memoryEnabled && approvedMemories.length > 0) {
+        const totalApprovedBullets = approvedBlocks.reduce((sum, b) => sum + b.bullets.length, 0);
+
+        if (memoryEnabled && totalApprovedBullets > 0) {
             const avatar = ctx?.characters?.[ctx?.characterId]?.avatar
                 || (typeof characters !== 'undefined' ? characters[ctx?.characterId]?.avatar : undefined);
 
@@ -1468,26 +1698,36 @@ async function onSummariseClick() {
                 // Build <memory> tag block (CharMemory-compatible format)
                 const timestamp = new Date().toISOString().slice(0, 16).replace('T', ' ');
                 const sceneLabel = snapshot.title;
-                const bulletsText = approvedMemories.map(b => `- ${b}`).join('\n');
-                const newBlock = `<memory chat="${sceneLabel}" date="${timestamp}">\n${bulletsText}\n</memory>`;
 
-                await appendSSMemoriesBlock(avatar, fileName, newBlock);
-
-                // Update lightweight in-memory index
+                let blockMarkdowns = [];
                 chatState.memories = chatState.memories || [];
-                const newMemories = approvedMemories.map(text => ({
-                    id: ++chatState.memoryCounter,
-                    text,
-                    chatLabel: sceneLabel,
-                    extractedAt: chat.length,
-                    createdAt: Date.now(),
-                    source: 'extracted',
-                }));
-                chatState.memories.push(...newMemories);
+                let memoriesAdded = 0;
+
+                for (const block of approvedBlocks) {
+                    const bulletsText = `* ${block.header}\n` + block.bullets.map(b => `* ${b}`).join('\n');
+                    const newBlock = `<memory chat="${sceneLabel}" date="${timestamp}">\n${bulletsText}\n</memory>`;
+                    blockMarkdowns.push(newBlock);
+
+                    const newMemories = block.bullets.map(text => ({
+                        id: ++chatState.memoryCounter,
+                        text,
+                        chatLabel: sceneLabel,
+                        blockHeader: block.header,
+                        characters: block.characters,
+                        extractedAt: chat.length,
+                        createdAt: Date.now(),
+                        source: 'extracted',
+                    }));
+                    chatState.memories.push(...newMemories);
+                    memoriesAdded += newMemories.length;
+                }
+
+                await appendSSMemoriesBlock(avatar, fileName, blockMarkdowns.join('\n\n'));
+
                 pruneMemories(chatState, settings);
 
-                logDebug('log', `Persisted ${approvedMemories.length} memories for ${sceneLabel}`);
-                toastr.info(`Saved summary and ${approvedMemories.length} ${approvedMemories.length === 1 ? 'fact' : 'facts'} to Data Bank.`, extensionName);
+                logDebug('log', `Persisted ${memoriesAdded} memories across ${approvedBlocks.length} blocks for ${sceneLabel}`);
+                toastr.info(`Saved summary and ${memoriesAdded} ${memoriesAdded === 1 ? 'fact' : 'facts'} to Data Bank.`, extensionName);
             } else {
                 logDebug('warn', 'Memory extraction: no character avatar found, skipping Data Bank write');
             }
@@ -1651,13 +1891,13 @@ async function onBatchSummariseClick() {
         try {
             const rawResult = await callSummarisationLLM(prompt, currentAbortController.signal);
             // Parse combined response — falls back gracefully to summary-only if tags are absent
-            const { summaryText, bullets } = parseExtractionResponse(rawResult || '');
+            const { summaryText, blocks } = parseExtractionResponse(rawResult || '');
             let cleaned = summaryText;
             if (cleaned.startsWith(prompt.trim())) {
                 cleaned = cleaned.substring(prompt.trim().length).trim();
             }
             logDebug('log', `LLM batch summary result ${i + 1}/${totalBatches}`, cleaned);
-            logDebug('log', `Memory bullets extracted: ${bullets.length}`);
+            logDebug('log', `Memory blocks extracted: ${blocks ? blocks.length : 0}`);
 
             // Update stored snapshot list
             const nextId = (chatState.summaryCounter ?? 0) + 1;
@@ -1683,7 +1923,9 @@ async function onBatchSummariseClick() {
 
             // --- Memory Extraction (§2): persist bullets to Data Bank (silently in batch mode) ---
             const memoryEnabled = settings.memoryExtractionEnabled ?? defaultSettings.memoryExtractionEnabled;
-            if (memoryEnabled && bullets.length > 0) {
+            const totalApprovedBullets = blocks.reduce((sum, b) => sum + b.bullets.length, 0);
+
+            if (memoryEnabled && totalApprovedBullets > 0) {
                 const batchCtx = getContext();
                 const avatar = batchCtx?.characters?.[batchCtx?.characterId]?.avatar
                     || (typeof characters !== 'undefined' ? characters[batchCtx?.characterId]?.avatar : undefined);
@@ -1693,26 +1935,37 @@ async function onBatchSummariseClick() {
                     const fileName = getSSMemoryFileName(chatId);
                     const timestamp = new Date().toISOString().slice(0, 16).replace('T', ' ');
                     const sceneLabel = snapshot.title;
-                    const bulletsText = bullets.map(b => `- ${b}`).join('\n');
-                    const newBlock = `<memory chat="${sceneLabel}" date="${timestamp}">\n${bulletsText}\n</memory>`;
+                    
+                    let blockMarkdowns = [];
+                    chatState.memories = chatState.memories || [];
+                    let memoriesAdded = 0;
+
+                    for (const block of blocks) {
+                        const bulletsText = `* ${block.header}\n` + block.bullets.map(b => `* ${b}`).join('\n');
+                        const newBlock = `<memory chat="${sceneLabel}" date="${timestamp}">\n${bulletsText}\n</memory>`;
+                        blockMarkdowns.push(newBlock);
+
+                        const newMemories = block.bullets.map(text => ({
+                            id: ++chatState.memoryCounter,
+                            text,
+                            chatLabel: sceneLabel,
+                            blockHeader: block.header,
+                            characters: block.characters,
+                            extractedAt: batchToIndex,
+                            createdAt: Date.now(),
+                            source: 'extracted',
+                        }));
+                        chatState.memories.push(...newMemories);
+                        memoriesAdded += newMemories.length;
+                    }
 
                     // Fire-and-forget in batch: don't block the loop, but log errors
-                    appendSSMemoriesBlock(avatar, fileName, newBlock).catch(err => {
+                    appendSSMemoriesBlock(avatar, fileName, blockMarkdowns.join('\n\n')).catch(err => {
                         logDebug('error', `Batch memory write failed for ${sceneLabel}:`, err?.message || err);
                     });
 
-                    chatState.memories = chatState.memories || [];
-                    const newMemories = bullets.map(text => ({
-                        id: ++chatState.memoryCounter,
-                        text,
-                        chatLabel: sceneLabel,
-                        extractedAt: batchToIndex,
-                        createdAt: Date.now(),
-                        source: 'extracted',
-                    }));
-                    chatState.memories.push(...newMemories);
                     pruneMemories(chatState, settings);
-                    logDebug('log', `Batch: persisted ${bullets.length} memories for ${sceneLabel}`);
+                    logDebug('log', `Batch: persisted ${memoriesAdded} memories for ${sceneLabel}`);
                 }
             }
 

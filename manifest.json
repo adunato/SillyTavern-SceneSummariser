@@ -9,6 +9,6 @@
     "css": "style.css",
     "author": "User",
     "description": "Scene summarisation and memory extraction for maintaining long-term context.",
-    "version": "0.2.0",
+    "version": "0.3.0",
     "manifest_version": 3
 }
