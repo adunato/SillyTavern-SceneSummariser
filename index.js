@@ -875,6 +875,25 @@ function bindSettingsUI(container) {
         }
 
         if (!event.target.classList.contains('ss-snap-text')) return;
+        const id = Number(event.target.dataset.id);
+        const chatState = getChatState();
+        const snap = chatState.snapshots.find(s => s.id === id);
+        if (snap) {
+            snap.text = event.target.value;
+            saveSettingsDebounced();
+
+            // Refresh preview using full build logic (respects Store History)
+            const currentSummary = container.querySelector('#ss_currentSummary');
+            if (currentSummary) {
+                currentSummary.value = buildSummaryText(chatState, extension_settings[settingsKey]);
+            }
+
+            applyInjection();
+        }
+    });
+
+    // 2c) Debug controls
+    container.querySelector('#ss_copyLogs')?.addEventListener('click', async () => {
         const text = debugMessages.join('\n');
         try {
             await navigator.clipboard.writeText(text);
