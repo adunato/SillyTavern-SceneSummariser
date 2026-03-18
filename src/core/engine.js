@@ -7,16 +7,24 @@ import { getActiveChatId } from '../state/stateManager.js';
 export function parseExtractionResponse(raw) {
     const text = (raw || '').trim();
     const summaryMatch = text.match(/<summary>([\s\S]*?)<\/summary>/i);
+    const titleMatch = text.match(/<title>([\s\S]*?)<\/title>/i);
+    const descMatch = text.match(/<description>([\s\S]*?)<\/description>/i);
     const memoryBlocksRaw = [...text.matchAll(/<memor(?:y|ies)>([\s\S]*?)<\/memor(?:y|ies)>/gi)];
 
     let summaryText = summaryMatch ? summaryMatch[1].trim() : text;
+    let title = titleMatch ? titleMatch[1].trim() : '';
+    let description = descMatch ? descMatch[1].trim() : '';
     
-    // 1. Remove any <memory> or <memories> blocks (including content) that might be inside the summaryText
+    // 1. Remove any <memory>, <title>, or <description> blocks (including content) that might be inside the summaryText
     summaryText = summaryText.replace(/<memor(?:y|ies)>[\s\S]*?<\/memor(?:y|ies)>/gi, '').trim();
+    summaryText = summaryText.replace(/<title>[\s\S]*?<\/title>/gi, '').trim();
+    summaryText = summaryText.replace(/<description>[\s\S]*?<\/description>/gi, '').trim();
     
     // 2. Strip any residual or malformed tags (just the tags, keep content)
     summaryText = summaryText.replace(/<\/?summary>/gi, '').trim();
     summaryText = summaryText.replace(/<\/?memor(?:y|ies)>/gi, '').trim();
+    summaryText = summaryText.replace(/<\/?title>/gi, '').trim();
+    summaryText = summaryText.replace(/<\/?description>/gi, '').trim();
     
     const blocks = [];
 
@@ -74,7 +82,7 @@ export function parseExtractionResponse(raw) {
         }
     }
     
-    return { summaryText, blocks };
+    return { summaryText, blocks, title, description };
 }
 
 /**
@@ -135,7 +143,7 @@ export function buildSummaryText(chatState, settings) {
         return lastSnapshots.map(s => `${s.title}: ${s.text}`).join('\n');
     }
     const latest = getLatestSnapshot(chatState);
-    return latest?.text || '';
+    return latest ? `${latest.title}: ${latest.text}` : '';
 }
 
 /**

@@ -175,7 +175,7 @@ export async function onSummariseClick() {
     try {
         const rawResult = await callSummarisationLLM(prompt, state.currentAbortController.signal);
         // Parse combined response — falls back gracefully to summary-only if tags are absent
-        const { summaryText, blocks } = parseExtractionResponse(rawResult || '');
+        const { summaryText, blocks, title, description } = parseExtractionResponse(rawResult || '');
         let cleaned = summaryText;
         if (cleaned.startsWith(prompt.trim())) {
             cleaned = cleaned.substring(prompt.trim().length).trim();
@@ -194,9 +194,11 @@ export async function onSummariseClick() {
         // Update stored snapshot list
         const words = settings.summaryWords || defaultSettings.summaryWords;
         const nextId = (chatState.summaryCounter ?? 0) + 1;
+        const baseTitle = `Scene #${nextId}`;
         const snapshot = {
             id: nextId,
-            title: `Scene #${nextId}`,
+            title: title ? `${baseTitle} - ${title}` : baseTitle,
+            description: description || '',
             text: editedText,
             createdAt: Date.now(),
             fromIndex: lastIdx,
@@ -420,7 +422,7 @@ export async function onBatchSummariseClick() {
         try {
             const rawResult = await callSummarisationLLM(prompt, state.currentAbortController.signal);
             // Parse combined response — falls back gracefully to summary-only if tags are absent
-            const { summaryText, blocks } = parseExtractionResponse(rawResult || '');
+            const { summaryText, blocks, title, description } = parseExtractionResponse(rawResult || '');
             let cleaned = summaryText;
             if (cleaned.startsWith(prompt.trim())) {
                 cleaned = cleaned.substring(prompt.trim().length).trim();
@@ -435,9 +437,11 @@ export async function onBatchSummariseClick() {
             const batchFromIndex = batch[0].originalIndex;
             const batchToIndex = batch[batch.length - 1].originalIndex + 1; // exclusive end
 
+            const baseTitle = `Scene #${nextId}`;
             const snapshot = {
                 id: nextId,
-                title: `Scene #${nextId}`,
+                title: title ? `${baseTitle} - ${title}` : baseTitle,
+                description: description || '',
                 text: cleaned,
                 createdAt: Date.now(),
                 fromIndex: batchFromIndex,
@@ -626,7 +630,7 @@ export async function onConsolidateClick() {
             + `\n\nScenes to consolidate:\n${summariesText}`;
 
         const result = await callSummarisationLLM(prompt, state.currentAbortController.signal);
-        const { summaryText } = parseExtractionResponse(result || '');
+        const { summaryText, title, description } = parseExtractionResponse(result || '');
         let cleaned = summaryText;
         if (cleaned.startsWith(prompt.trim())) {
             cleaned = cleaned.substring(prompt.trim().length).trim();
@@ -656,7 +660,8 @@ export async function onConsolidateClick() {
 
         const newSnapshot = {
             id: newId,
-            title: newTitle,
+            title: title ? `${newTitle} - ${title}` : newTitle,
+            description: description || '',
             text: editedText,
             createdAt: Date.now(),
             fromIndex: firstSnap.fromIndex,

@@ -46,6 +46,9 @@ export function renderSnapshotsList(container, chatState, settings) {
                     </div>
                 </div>
                 <div class="inline-drawer-content ss-snapshot-content">
+                    <div class="setting_item" style="margin-bottom: 5px;">
+                        <textarea class="text_pole ss-snap-desc" data-id="${snap.id}" rows="2" placeholder="Scene Description" style="width:100%; font-size:0.9em; font-family:inherit;">${snap.description || ''}</textarea>
+                    </div>
                     <div class="setting_item">
                         <textarea class="text_pole ss-snap-text" data-id="${snap.id}" rows="6" style="width:100%; font-size:0.9em; font-family:inherit;">${snap.text || ''}</textarea>
                     </div>
@@ -175,7 +178,7 @@ export async function regenerateSnapshot(snapshot, settings, chatState) {
 
     try {
         const result = await callSummarisationLLM(prompt);
-        const { summaryText, blocks } = parseExtractionResponse(result || '');
+        const { summaryText, blocks, title, description } = parseExtractionResponse(result || '');
         let cleaned = summaryText;
         if (cleaned.startsWith(prompt.trim())) {
             cleaned = cleaned.substring(prompt.trim().length).trim();
@@ -191,6 +194,14 @@ export async function regenerateSnapshot(snapshot, settings, chatState) {
         const { summary: editedText, blocks: approvedBlocks } = editorResult;
 
         snapshot.text = editedText;
+        if (title) {
+            const baseTitleMatch = snapshot.title.match(/^(Scene #\d+)/);
+            const baseTitle = baseTitleMatch ? baseTitleMatch[1] : `Scene #${snapshot.id}`;
+            snapshot.title = `${baseTitle} - ${title}`;
+        }
+        if (description) {
+            snapshot.description = description;
+        }
         snapshot.createdAt = Date.now();
         logDebug('log', `Regenerated snapshot ${snapshot.id}`);
 
