@@ -183,13 +183,13 @@ export async function onSummariseClick() {
         logDebug('log', 'LLM summary result', cleaned);
         logDebug('log', `Memory blocks extracted: ${blocks ? blocks.length : 0}`);
 
-        const result = await showCombinedEditor(cleaned, blocks);
+        const result = await showCombinedEditor(cleaned, blocks, title, description);
         if (!result) {
             logDebug('log', 'User cancelled combined editor');
             return;
         }
 
-        const { summary: editedText, blocks: approvedBlocks } = result;
+        const { summary: editedText, blocks: approvedBlocks, title: editedTitle, description: editedDescription } = result;
 
         // Update stored snapshot list
         const words = settings.summaryWords || defaultSettings.summaryWords;
@@ -197,8 +197,8 @@ export async function onSummariseClick() {
         const baseTitle = `Scene #${nextId}`;
         const snapshot = {
             id: nextId,
-            title: title ? `${baseTitle} - ${title}` : baseTitle,
-            description: description || '',
+            title: editedTitle ? `${baseTitle} - ${editedTitle}` : baseTitle,
+            description: editedDescription || '',
             text: editedText,
             createdAt: Date.now(),
             fromIndex: lastIdx,
@@ -636,11 +636,13 @@ export async function onConsolidateClick() {
             cleaned = cleaned.substring(prompt.trim().length).trim();
         }
 
-        const editedText = await showSummaryEditor(cleaned);
-        if (editedText === null) {
+        const editedResult = await showSummaryEditor(cleaned, title, description);
+        if (editedResult === null) {
             logDebug('log', 'User cancelled consolidation editor');
             return;
         }
+
+        const { summary: editedText, title: editedTitle, description: editedDescription } = editedResult;
 
         // Determine title & indices
         const firstSnap = snapshotsToConsolidate[0];
@@ -660,8 +662,8 @@ export async function onConsolidateClick() {
 
         const newSnapshot = {
             id: newId,
-            title: title ? `${newTitle} - ${title}` : newTitle,
-            description: description || '',
+            title: editedTitle ? `${newTitle} - ${editedTitle}` : newTitle,
+            description: editedDescription || '',
             text: editedText,
             createdAt: Date.now(),
             fromIndex: firstSnap.fromIndex,

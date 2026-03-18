@@ -2,9 +2,9 @@ import { extensionName } from '../constants.js';
 import { renderExtensionTemplateAsync } from '../../../../../extensions.js';
 import { POPUP_TYPE, Popup } from '../../../../../popup.js';
 
-export async function showSummaryEditor(initialText) {
-    const result = await showCombinedEditor(initialText, []);
-    return result ? result.summary : null;
+export async function showSummaryEditor(initialText, initialTitle = '', initialDescription = '') {
+    const result = await showCombinedEditor(initialText, [], initialTitle, initialDescription);
+    return result ? { summary: result.summary, title: result.title, description: result.description } : null;
 }
 
 /**
@@ -13,14 +13,18 @@ export async function showSummaryEditor(initialText) {
  * @param {Array<{ header: string, characters: string[], bullets: string[] }>} initialBlocks AI-extracted memory blocks.
  * @returns {Promise<{ summary: string, blocks: Array<{ header: string, characters: string[], bullets: string[] }> }|null>} Final edited data, or null if cancelled.
  */
-export async function showCombinedEditor(initialSummary, initialBlocks) {
+export async function showCombinedEditor(initialSummary, initialBlocks, initialTitle = '', initialDescription = '') {
     // @ts-ignore
     const template = $(await renderExtensionTemplateAsync(`third-party/${extensionName}`, 'popup'));
     const summaryArea = template.find('#ssPopupTextarea');
+    const titleInput = template.find('#ssPopupTitle');
+    const descArea = template.find('#ssPopupDescription');
     const memoriesList = template.find('#ssPopupMemoriesList');
     const addBtn = template.find('#ssPopupAddMemory');
 
     summaryArea.val(initialSummary);
+    titleInput.val(initialTitle);
+    descArea.val(initialDescription);
 
     const refreshEmptyHint = () => {
         memoriesList.find('.ss-empty-hint').remove();
@@ -100,6 +104,8 @@ export async function showCombinedEditor(initialSummary, initialBlocks) {
     if (!result) return null;
 
     const finalSummary = String(summaryArea.val()).trim();
+    const finalTitle = String(titleInput.val()).trim();
+    const finalDescription = String(descArea.val()).trim();
     const finalBlocks = [];
 
     memoriesList.find('.ss-memory-block-item').each(function () {
@@ -129,5 +135,5 @@ export async function showCombinedEditor(initialSummary, initialBlocks) {
         }
     });
 
-    return { summary: finalSummary, blocks: finalBlocks };
+    return { summary: finalSummary, blocks: finalBlocks, title: finalTitle, description: finalDescription };
 }

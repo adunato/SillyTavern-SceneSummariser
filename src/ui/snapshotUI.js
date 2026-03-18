@@ -185,22 +185,22 @@ export async function regenerateSnapshot(snapshot, settings, chatState) {
         }
 
         // Use the combined editor to allow reviewing both the regenerated summary and memories
-        const editorResult = await showCombinedEditor(cleaned, blocks);
+        const editorResult = await showCombinedEditor(cleaned, blocks, title, description);
         if (!editorResult) {
             logDebug('log', 'User cancelled regeneration editor');
             return;
         }
 
-        const { summary: editedText, blocks: approvedBlocks } = editorResult;
+        const { summary: editedText, blocks: approvedBlocks, title: editedTitle, description: editedDescription } = editorResult;
 
         snapshot.text = editedText;
-        if (title) {
+        if (editedTitle) {
             const baseTitleMatch = snapshot.title.match(/^(Scene #\d+)/);
             const baseTitle = baseTitleMatch ? baseTitleMatch[1] : `Scene #${snapshot.id}`;
-            snapshot.title = `${baseTitle} - ${title}`;
+            snapshot.title = `${baseTitle} - ${editedTitle}`;
         }
-        if (description) {
-            snapshot.description = description;
+        if (editedDescription) {
+            snapshot.description = editedDescription;
         }
         snapshot.createdAt = Date.now();
         logDebug('log', `Regenerated snapshot ${snapshot.id}`);
