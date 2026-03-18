@@ -4,8 +4,8 @@ export const settingsKey = extensionName;
 export const defaultSettings = {
     enabled: true,
     autoSummarise: false,
-    summaryPrompt: 'Ignore previous instructions. Summarize the most important facts and events in the story so far. If a summary already exists in your memory, use that as a base and expand with new facts. Limit the summary to {{words}} words or less. Your response should include nothing but the summary.',
-    consolidationPrompt: 'Create a single, cohesive summary by merging the following scene summaries. Remove redundant information and ensure the narrative flows logically. Limit the final summary to {{words}} words or less. Your response should include nothing but the summary.',
+    summaryPrompt: 'Ignore previous instructions. Summarize the most important facts and events in the story so far. If a summary already exists in your memory, use that as a base and expand with new facts. Limit the summary to {{words}} words or less. Your response must include exactly three components:\n\n1. A single <title> block containing a brief title for the scene.\n2. A single <description> block containing a short description of the scene.\n3. A single <summary> block containing the plot summary.',
+    consolidationPrompt: 'Create a single, cohesive summary by merging the following scene summaries. Remove redundant information and ensure the narrative flows logically. Limit the final summary to {{words}} words or less. Your response must include exactly three components:\n\n1. A single <title> block containing a brief title for the consolidated scene.\n2. A single <description> block containing a short description of the consolidated scene.\n3. A single <summary> block containing the merged plot summary.',
     summaryWords: 200,
     storeHistory: true,
     maxSummaries: 5,
@@ -36,13 +36,21 @@ Existing Memories (Do not repeat or remix): {{existingMemories}}
 {{last_messages}}
 
 ===== UNIFIED OUTPUT FORMATTING INSTRUCTION =====
-Your output must contain exactly two components, in this exact order, with absolutely NO conversational filler, headers, or commentary:
+Your output must contain exactly four components, in this exact order, with absolutely NO conversational filler, headers, or commentary:
 
-1. A single <summary> block containing the plot summary.
-2. One or more <memory> blocks containing bulleted lists of extracted memories (or exactly NO_NEW_MEMORIES inside a single block if nothing significant occurred).
+1. A single <title> block containing a brief title for the scene.
+2. A single <description> block containing a short description of the scene.
+3. A single <summary> block containing the plot summary.
+4. One or more <memory> blocks containing bulleted lists of extracted memories (or exactly NO_NEW_MEMORIES inside a single block if nothing significant occurred).
 
 Example Output Structure:
 
+<title>
+Scene Title
+</title>
+<description>
+Short description of the scene.
+</description>
 <summary>
 Raw summary text goes here...
 </summary>

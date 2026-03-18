@@ -175,7 +175,7 @@ export async function onSummariseClick() {
     try {
         const rawResult = await callSummarisationLLM(prompt, state.currentAbortController.signal);
         // Parse combined response — falls back gracefully to summary-only if tags are absent
-        const { summaryText, blocks } = parseExtractionResponse(rawResult || '');
+        const { summaryText, blocks, title, description } = parseExtractionResponse(rawResult || '');
         let cleaned = summaryText;
         if (cleaned.startsWith(prompt.trim())) {
             cleaned = cleaned.substring(prompt.trim().length).trim();
@@ -183,20 +183,22 @@ export async function onSummariseClick() {
         logDebug('log', 'LLM summary result', cleaned);
         logDebug('log', `Memory blocks extracted: ${blocks ? blocks.length : 0}`);
 
-        const result = await showCombinedEditor(cleaned, blocks);
+        const result = await showCombinedEditor(cleaned, blocks, title, description);
         if (!result) {
             logDebug('log', 'User cancelled combined editor');
             return;
         }
 
-        const { summary: editedText, blocks: approvedBlocks } = result;
+        const { summary: editedText, blocks: approvedBlocks, title: editedTitle, description: editedDescription } = result;
 
         // Update stored snapshot list
         const words = settings.summaryWords || defaultSettings.summaryWords;
         const nextId = (chatState.summaryCounter ?? 0) + 1;
+        const baseTitle = `Scene #${nextId}`;
         const snapshot = {
             id: nextId,
-            title: `Scene #${nextId}`,
+            title: editedTitle ? `${baseTitle} - ${editedTitle}` : baseTitle,
+            description: editedDescription || '',
             text: editedText,
             createdAt: Date.now(),
             fromIndex: lastIdx,
@@ -420,7 +422,7 @@ export async function onBatchSummariseClick() {
         try {
             const rawResult = await callSummarisationLLM(prompt, state.currentAbortController.signal);
             // Parse combined response — falls back gracefully to summary-only if tags are absent
-            const { summaryText, blocks } = parseExtractionResponse(rawResult || '');
+            const { summaryText, blocks, title, description } = parseExtractionResponse(rawResult || '');
             let cleaned = summaryText;
             if (cleaned.startsWith(prompt.trim())) {
                 cleaned = cleaned.substring(prompt.trim().length).trim();
@@ -435,9 +437,11 @@ export async function onBatchSummariseClick() {
             const batchFromIndex = batch[0].originalIndex;
             const batchToIndex = batch[batch.length - 1].originalIndex + 1; // exclusive end
 
+            const baseTitle = `Scene #${nextId}`;
             const snapshot = {
                 id: nextId,
-                title: `Scene #${nextId}`,
+                title: title ? `${baseTitle} - ${title}` : baseTitle,
+                description: description || '',
                 text: cleaned,
                 createdAt: Date.now(),
                 fromIndex: batchFromIndex,
@@ -626,17 +630,19 @@ export async function onConsolidateClick() {
             + `\n\nScenes to consolidate:\n${summariesText}`;
 
         const result = await callSummarisationLLM(prompt, state.currentAbortController.signal);
-        const { summaryText } = parseExtractionResponse(result || '');
+        const { summaryText, title, description } = parseExtractionResponse(result || '');
         let cleaned = summaryText;
         if (cleaned.startsWith(prompt.trim())) {
             cleaned = cleaned.substring(prompt.trim().length).trim();
         }
 
-        const editedText = await showSummaryEditor(cleaned);
-        if (editedText === null) {
+        const editedResult = await showSummaryEditor(cleaned, title, description);
+        if (editedResult === null) {
             logDebug('log', 'User cancelled consolidation editor');
             return;
         }
+
+        const { summary: editedText, title: editedTitle, description: editedDescription } = editedResult;
 
         // Determine title & indices
         const firstSnap = snapshotsToConsolidate[0];
@@ -656,7 +662,8 @@ export async function onConsolidateClick() {
 
         const newSnapshot = {
             id: newId,
-            title: newTitle,
+            title: editedTitle ? `${newTitle} - ${editedTitle}` : newTitle,
+            description: editedDescription || '',
             text: editedText,
             createdAt: Date.now(),
             fromIndex: firstSnap.fromIndex,

@@ -46,6 +46,9 @@ export function renderSnapshotsList(container, chatState, settings) {
                     </div>
                 </div>
                 <div class="inline-drawer-content ss-snapshot-content">
+                    <div class="setting_item" style="margin-bottom: 5px;">
+                        <textarea class="text_pole ss-snap-desc" data-id="${snap.id}" rows="2" placeholder="Scene Description" style="width:100%; font-size:0.9em; font-family:inherit;">${snap.description || ''}</textarea>
+                    </div>
                     <div class="setting_item">
                         <textarea class="text_pole ss-snap-text" data-id="${snap.id}" rows="6" style="width:100%; font-size:0.9em; font-family:inherit;">${snap.text || ''}</textarea>
                     </div>
@@ -175,22 +178,30 @@ export async function regenerateSnapshot(snapshot, settings, chatState) {
 
     try {
         const result = await callSummarisationLLM(prompt);
-        const { summaryText, blocks } = parseExtractionResponse(result || '');
+        const { summaryText, blocks, title, description } = parseExtractionResponse(result || '');
         let cleaned = summaryText;
         if (cleaned.startsWith(prompt.trim())) {
             cleaned = cleaned.substring(prompt.trim().length).trim();
         }
 
         // Use the combined editor to allow reviewing both the regenerated summary and memories
-        const editorResult = await showCombinedEditor(cleaned, blocks);
+        const editorResult = await showCombinedEditor(cleaned, blocks, title, description);
         if (!editorResult) {
             logDebug('log', 'User cancelled regeneration editor');
             return;
         }
 
-        const { summary: editedText, blocks: approvedBlocks } = editorResult;
+        const { summary: editedText, blocks: approvedBlocks, title: editedTitle, description: editedDescription } = editorResult;
 
         snapshot.text = editedText;
+        if (editedTitle) {
+            const baseTitleMatch = snapshot.title.match(/^(Scene #\d+)/);
+            const baseTitle = baseTitleMatch ? baseTitleMatch[1] : `Scene #${snapshot.id}`;
+            snapshot.title = `${baseTitle} - ${editedTitle}`;
+        }
+        if (editedDescription) {
+            snapshot.description = editedDescription;
+        }
         snapshot.createdAt = Date.now();
         logDebug('log', `Regenerated snapshot ${snapshot.id}`);
 

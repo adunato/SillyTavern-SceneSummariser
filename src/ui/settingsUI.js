@@ -83,6 +83,17 @@ export function bindSettingsUI(container) {
 
     // 1b) Auto-save summary text
     container.addEventListener('input', (event) => {
+        if (event.target.classList.contains('ss-snap-desc')) {
+            const id = Number(event.target.dataset.id);
+            const chatState = getChatState();
+            const snap = chatState.snapshots.find(s => s.id === id);
+            if (snap) {
+                snap.description = event.target.value;
+                saveSettingsDebounced();
+            }
+            return;
+        }
+
         if (!event.target.classList.contains('ss-snap-text')) return;
         const id = Number(event.target.dataset.id);
         const chatState = getChatState();
@@ -237,6 +248,17 @@ export function bindSettingsUI(container) {
                     await writeSSMemoriesFile(avatar, fileName, chatState.memories);
                 }
             }, 2000);
+            return;
+        }
+
+        if (event.target.classList.contains('ss-snap-desc')) {
+            const id = Number(event.target.dataset.id);
+            const chatState = getChatState();
+            const snap = chatState.snapshots.find(s => s.id === id);
+            if (snap) {
+                snap.description = event.target.value;
+                saveSettingsDebounced();
+            }
             return;
         }
 
