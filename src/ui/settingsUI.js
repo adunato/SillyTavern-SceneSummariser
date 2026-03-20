@@ -114,12 +114,17 @@ export function bindSettingsUI(container) {
 
     // 2) Click delegation
     container.addEventListener('click', async (event) => {
-        const actionEl = event.target.closest('[data-ss-action]');
-        if (actionEl) {
-            const action = actionEl.dataset.ssAction;
-            if (action === 'toggle-settings') togglePanel(container, '#ss_settings_panel');
-            if (action === 'toggle-memory') togglePanel(container, '#ss_memory_panel');
-            if (action === 'toggle-summary') togglePanel(container, '#ss_summary_panel');
+        const tabEl = event.target.closest('.tab');
+        if (tabEl) {
+            const tabName = tabEl.dataset.tab;
+            const tabs = container.querySelectorAll('.tab');
+            tabs.forEach(t => t.classList.remove('active'));
+            const contents = container.querySelectorAll('.tab-content');
+            contents.forEach(c => c.classList.remove('active'));
+            
+            tabEl.classList.add('active');
+            const targetContent = container.querySelector(`#${tabName}`);
+            if (targetContent) targetContent.classList.add('active');
             return;
         }
 

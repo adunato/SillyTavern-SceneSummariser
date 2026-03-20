@@ -29,14 +29,8 @@ export function renderMemoriesList(container, chatState) {
     // Render Tabs
     const renderTabButton = (name) => {
         const btn = document.createElement('button');
-        btn.className = `menu_button interactable ${state.currentMemoryTab === name ? 'fa-solid fa-check' : ''}`;
-        btn.textContent = name;
-        btn.style.padding = '4px 8px';
-        btn.style.fontSize = '0.9em';
-        if (state.currentMemoryTab === name) {
-            btn.style.background = 'var(--smart-theme-focus)';
-            btn.style.color = 'var(--smart-theme-focus-text)';
-        }
+        btn.className = `badge ${state.currentMemoryTab === name ? 'active' : ''}`;
+        btn.innerHTML = state.currentMemoryTab === name ? `<i class="fas fa-check"></i> ${name}` : name;
         btn.addEventListener('click', () => {
             state.currentMemoryTab = name;
             renderMemoriesList(container, chatState);
@@ -68,15 +62,12 @@ export function renderMemoriesList(container, chatState) {
 
     for (const [header, blockMemories] of Object.entries(grouped)) {
         const blockEl = document.createElement('div');
-        blockEl.style.border = '1px solid var(--grey40)';
-        blockEl.style.borderRadius = '5px';
-        blockEl.style.padding = '5px';
-        blockEl.style.background = 'var(--grey30)';
+        blockEl.className = 'memory-block';
         
         let headerHtml = `
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
-                <input type="text" class="text_pole ss-memory-block-header" data-original-header="${header.replace(/"/g, '&quot;')}" value="${header.replace(/"/g, '&quot;')}" style="flex:1; font-weight:bold; background:transparent; border:none; border-bottom:1px solid var(--grey50); margin-right:5px;"/>
-                <i class="fa-solid fa-trash-can ss-delete-icon ss-action-icon ss-delete-full-block" title="Delete entire block" data-header="${header.replace(/"/g, '&quot;')}"></i>
+            <div class="memory-header">
+                <input type="text" class="text_pole ss-memory-block-header" data-original-header="${header.replace(/"/g, '&quot;')}" value="${header.replace(/"/g, '&quot;')}" style="flex:1; font-weight:bold; background:transparent; border:none; margin-right:5px; padding:0; height:auto; min-height:auto;"/>
+                <button class="icon-btn trash ss-delete-full-block" title="Delete entire block" data-header="${header.replace(/"/g, '&quot;')}"><i class="fas fa-trash"></i></button>
             </div>
             <div class="ss-block-items"></div>
         `;
