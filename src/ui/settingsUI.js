@@ -1,9 +1,9 @@
 import { extensionName, settingsKey, defaultSettings, state } from '../constants.js';
 import { logDebug } from '../utils/logger.js';
-import { getChatState } from '../state/stateManager.js';
+import { getChatState, getActiveChatId } from '../state/stateManager.js';
 import { buildSummaryText } from '../core/engine.js';
 import { applyInjection, updateInjectionVisibility, updateContextControlVisibility } from '../core/injector.js';
-import { getSSMemoryFileName, writeSSMemoriesFile } from '../storage/memoryFileHandler.js';
+import { persistMemoriesForChat } from '../storage/memoryFileHandler.js';
 import { extension_settings, renderExtensionTemplateAsync, getContext } from '../../../../../extensions.js';
 import { saveSettingsDebounced } from '../../../../../../script.js';
 import { ConnectionManagerRequestService } from '../../../../shared.js';
@@ -127,6 +127,32 @@ export function bindSettingsUI(container) {
             return;
         }
 
+        // Snapshot inner character tabs
+        const snapTabBtn = event.target.closest('.ss-snap-tab-btn');
+        if (snapTabBtn) {
+            const char = snapTabBtn.dataset.char;
+            const snapId = snapTabBtn.dataset.snapId;
+            const itemContainer = container.querySelector(`.ss-snap-memories-container[data-snap-id="${snapId}"]`);
+            if (itemContainer) {
+                const allTabs = snapTabBtn.parentElement.querySelectorAll('.ss-snap-tab-btn');
+                allTabs.forEach(t => t.classList.remove('active'));
+                snapTabBtn.classList.add('active');
+
+                const items = itemContainer.querySelectorAll('.ss-memory-edit-item');
+                items.forEach(item => {
+                    if (char === 'All') {
+                        // @ts-ignore
+                        item.style.display = '';
+                    } else {
+                        const itemChars = (item.dataset.chars || '').split('||');
+                        // @ts-ignore
+                        item.style.display = itemChars.includes(char) ? '' : 'none';
+                    }
+                });
+            }
+            return;
+        }
+
         // Accordion header expand/collapse
         const headerEl = event.target.closest('.ss-snapshot-header');
         if (headerEl && !event.target.closest('.ss-no-propagate')) {
@@ -177,14 +203,7 @@ export function bindSettingsUI(container) {
             if (snap && snap.memories) {
                 snap.memories.splice(index, 1);
                 
-                const ctx = getContext();
-                const avatar = ctx?.characters?.[ctx?.characterId]?.avatar
-                    // @ts-ignore
-                    || (typeof characters !== 'undefined' ? characters[ctx?.characterId]?.avatar : undefined);
-                if (avatar) {
-                    const fileName = getSSMemoryFileName(chatState.chatId || getActiveChatId());
-                    writeSSMemoriesFile(avatar, fileName, chatState.snapshots).catch(err => logDebug('error', 'writeSSMemoriesFile', err));
-                }
+                persistMemoriesForChat(chatState).catch(err => logDebug('error', 'persistMemoriesForChat', err));
                 
                 saveSettingsDebounced();
                 renderSnapshotsList(container, chatState, extension_settings[settingsKey]);
@@ -209,14 +228,7 @@ export function bindSettingsUI(container) {
 
                 clearTimeout(snap.memoryRewriteTimeout);
                 snap.memoryRewriteTimeout = setTimeout(() => {
-                    const ctx = getContext();
-                    const avatar = ctx?.characters?.[ctx?.characterId]?.avatar
-                        // @ts-ignore
-                        || (typeof characters !== 'undefined' ? characters[ctx?.characterId]?.avatar : undefined);
-                    if (avatar) {
-                        const fileName = getSSMemoryFileName(chatState.chatId || getActiveChatId());
-                        writeSSMemoriesFile(avatar, fileName, chatState.snapshots).catch(err => logDebug('error', 'writeSSMemoriesFile', err));
-                    }
+                    persistMemoriesForChat(chatState).catch(err => logDebug('error', 'persistMemoriesForChat', err));
                 }, 2000);
             }
             return;

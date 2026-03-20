@@ -1,7 +1,6 @@
 import { getContext } from '../../../../../extensions.js';
 import { defaultSettings } from '../constants.js';
 import { logDebug } from '../utils/logger.js';
-import { getSSMemoryFileName, writeSSMemoriesFile } from '../storage/memoryFileHandler.js';
 import { getActiveChatId } from '../state/stateManager.js';
 
 export function parseExtractionResponse(raw) {
@@ -55,7 +54,21 @@ export function parseExtractionResponse(raw) {
  */
 export function buildExtractionPrompt(transcript, settings, previousSummaryText, chatState = {}) {
     const ctx = getContext();
-    const charName = ctx?.name2 || 'Character';
+    
+    let charNames = ctx?.name2 || 'Character';
+    if (ctx?.groupId && Array.isArray(ctx?.groups) && Array.isArray(ctx?.characters)) {
+        const group = ctx.groups.find(g => g.id === ctx.groupId);
+        if (group && Array.isArray(group.members)) {
+            const memberNames = group.members.map(avatar => {
+                const char = ctx.characters.find(c => c.avatar === avatar);
+                return char ? char.name : null;
+            }).filter(Boolean);
+            if (memberNames.length > 0) {
+                charNames = memberNames.join(', ');
+            }
+        }
+    }
+
     const words = settings.summaryWords || defaultSettings.summaryWords;
     const enabled = settings.memoryExtractionEnabled ?? defaultSettings.memoryExtractionEnabled;
     const template = enabled
@@ -73,7 +86,8 @@ export function buildExtractionPrompt(transcript, settings, previousSummaryText,
         .replace(/\{\{words\}\}/g, words)
         .replace(/\{\{summary\}\}/g, previousSummaryText || '')
         .replace(/\{\{last_messages\}\}/g, transcript || '(no messages)')
-        .replace(/\{\{charName\}\}/g, charName)
+        .replace(/\{\{charNames\}\}/g, charNames)
+        .replace(/\{\{charName\}\}/g, charNames) // fallback for older prompts
         .replace(/\{\{existingMemories\}\}/g, existingMemories);
 }
 

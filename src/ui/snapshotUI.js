@@ -2,7 +2,7 @@ import { extension_settings, getContext } from '../../../../../extensions.js';
 import { reloadCurrentChat } from '../../../../../../script.js';
 import { settingsKey, defaultSettings, extensionName } from '../constants.js';
 import { logDebug } from '../utils/logger.js';
-import { getSSMemoryFileName, writeSSMemoriesFile } from '../storage/memoryFileHandler.js';
+import { getSSMemoryFileName, persistMemoriesForChat } from '../storage/memoryFileHandler.js';
 import { getActiveChatId } from '../state/stateManager.js';
 import { buildExtractionPrompt, parseExtractionResponse } from '../core/engine.js';
 import { callSummarisationLLM } from '../core/llmApi.js';
@@ -28,17 +28,38 @@ export function renderSnapshotsList(container, chatState, settings) {
 
         let memoriesHtml = '';
         if (snap.memories && snap.memories.length > 0) {
+            const uniqueChars = new Set();
+            const parsedMemories = snap.memories.map(mem => {
+                let chars = [];
+                const match = mem.match(/^([^:]+):/);
+                if (match) {
+                    chars = match[1].split(',').map(c => c.trim()).filter(c => c);
+                    chars.forEach(c => uniqueChars.add(c));
+                }
+                return { text: mem, chars };
+            });
+
             memoriesHtml = '<div class="ss-snapshot-memories" style="margin-top: 10px;">';
             memoriesHtml += '<div class="section-title" style="margin-bottom: 5px; font-size: 0.85em; color: var(--text-muted);">Extracted Facts</div>';
-            snap.memories.forEach((mem, index) => {
+
+            if (uniqueChars.size > 0) {
+                memoriesHtml += `<div class="ss-snap-memory-tabs filter-row" style="margin-bottom: 10px; display: flex; gap: 5px; flex-wrap: wrap;">
+                    <div class="badge active ss-snap-tab-btn" data-snap-id="${snap.id}" data-char="All" style="cursor: pointer;">All</div>
+                    ${Array.from(uniqueChars).map(c => `<div class="badge ss-snap-tab-btn" data-snap-id="${snap.id}" data-char="${c.replace(/"/g, '&quot;')}" style="cursor: pointer;">${c}</div>`).join('')}
+                </div>`;
+            }
+
+            memoriesHtml += `<div class="ss-snap-memories-container" data-snap-id="${snap.id}">`;
+            parsedMemories.forEach((parsed, index) => {
+                const charsAttr = parsed.chars.join('||');
                 memoriesHtml += `
-                    <div class="ss-memory-edit-item" style="margin-bottom: 5px;">
-                        <textarea class="text_pole ss-snap-memory-text" data-snap-id="${snap.id}" data-index="${index}" rows="1" style="width:100%; font-size:0.9em; font-family:inherit;">${mem.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</textarea>
+                    <div class="ss-memory-edit-item" data-chars="${charsAttr.replace(/"/g, '&quot;')}" style="margin-bottom: 5px;">
+                        <textarea class="text_pole ss-snap-memory-text" data-snap-id="${snap.id}" data-index="${index}" rows="1" style="width:100%; font-size:0.9em; font-family:inherit;">${parsed.text.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</textarea>
                         <button class="icon-btn trash ss-delete-snap-memory" title="Remove fact" data-snap-id="${snap.id}" data-index="${index}"><i class="fas fa-trash"></i></button>
                     </div>
                 `;
             });
-            memoriesHtml += '</div>';
+            memoriesHtml += '</div></div>';
         }
 
         const item = document.createElement('div');
@@ -101,10 +122,7 @@ export async function handleSnapshotAction(action, snapshotId, chatState, contai
             }
 
             // 3. Clean up Data Bank
-            if (avatar) {
-                const fileName = getSSMemoryFileName(getActiveChatId());
-                await writeSSMemoriesFile(avatar, fileName, chatState.snapshots);
-            }
+            await persistMemoriesForChat(chatState);
 
             // 4. Clean up chat marker if it exists
             const fullChat = ctx?.chat || [];
@@ -223,18 +241,8 @@ export async function regenerateSnapshot(snapshot, settings, chatState) {
         // Handle memory extraction for regenerated snapshot
         const memoryEnabled = settings.memoryExtractionEnabled ?? defaultSettings.memoryExtractionEnabled;
         if (memoryEnabled) {
-            const avatar = ctx?.characters?.[ctx?.characterId]?.avatar
-                // @ts-ignore
-                || (typeof characters !== 'undefined' ? characters[ctx?.characterId]?.avatar : undefined)
-                || ctx?.avatar;
-            if (avatar) {
-                const chatId = getActiveChatId();
-                const fileName = getSSMemoryFileName(chatId);
-
-                // Completely rewrite the file to clear out old deleted memories and add the new ones
-                await writeSSMemoriesFile(avatar, fileName, chatState.snapshots);
-                logDebug('log', `Regenerated and persisted memories for ${snapshot.title}`);
-            }
+            await persistMemoriesForChat(chatState);
+            logDebug('log', `Regenerated and persisted memories for ${snapshot.title}`);
         }
     } catch (err) {
         console.error(`[${extensionName}] Failed to regenerate snapshot`, err);
