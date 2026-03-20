@@ -21,7 +21,6 @@
 
         <div class="tabs">
             <button type="button" class="tab active" data-tab="settings"><i class="fas fa-cog"></i> Settings</button>
-            <button type="button" class="tab" data-tab="memory"><i class="fas fa-brain"></i> Memory</button>
             <button type="button" class="tab" data-tab="snapshots"><i class="fas fa-list"></i> Snapshots</button>
         </div>
 
@@ -36,12 +35,18 @@
                     <span class="help-text">Select a Connection Manager profile to use a dedicated model/API for summarisation. Blank = main chat API.</span>
                 </div>
                 <div class="control-group">
-                    <label class="block-label">Summary Prompt</label>
+                    <label class="block-label" style="display: flex; justify-content: space-between; align-items: center;">
+                        <span>Summary Prompt</span>
+                        <button id="ss_reset_summaryPrompt" class="icon-btn" title="Reset to default prompt" style="padding: 0;"><i class="fa-solid fa-arrow-rotate-left"></i></button>
+                    </label>
                     <textarea id="ss_summaryPrompt" name="summaryPrompt" class="ss-setting-input" rows="2" placeholder="Prompt used to generate summaries..."></textarea>
                     <span id="ss_summaryPrompt_hint" class="help-text">Prompt used to generate summaries.</span>
                 </div>
                 <div class="control-group">
-                    <label class="block-label">Consolidation Prompt</label>
+                    <label class="block-label" style="display: flex; justify-content: space-between; align-items: center;">
+                        <span>Consolidation Prompt</span>
+                        <button id="ss_reset_consolidationPrompt" class="icon-btn" title="Reset to default prompt" style="padding: 0;"><i class="fa-solid fa-arrow-rotate-left"></i></button>
+                    </label>
                     <textarea id="ss_consolidationPrompt" name="consolidationPrompt" class="ss-setting-input" rows="3" placeholder="Prompt used to merge multiple summaries..."></textarea>
                 </div>
             </div>
@@ -60,9 +65,12 @@
                 <span class="help-text" style="margin-bottom: 12px; display: block;">Co-extract atomic facts alongside scene summaries — stored in the Data Bank for Vector Storage retrieval.</span>
                 
                 <div class="control-group">
-                    <label class="block-label">Extraction Prompt (Combined)</label>
+                    <label class="block-label" style="display: flex; justify-content: space-between; align-items: center;">
+                        <span>Extraction Prompt (Combined)</span>
+                        <button id="ss_reset_memoryPrompt" class="icon-btn" title="Reset to default prompt" style="padding: 0;"><i class="fa-solid fa-arrow-rotate-left"></i></button>
+                    </label>
                     <textarea id="ss_memoryPrompt" name="memoryPrompt" class="ss-setting-input" rows="4"></textarea>
-                    <span id="ss_memoryPrompt_hint" class="help-text">This prompt replaces the Summary Prompt when extraction is enabled. Must include &lt;summary&gt; and &lt;memories&gt; tags.</span>
+                    <span id="ss_memoryPrompt_hint" class="help-text">This prompt replaces the Summary Prompt when extraction is enabled. Must include &lt;summary&gt; and &lt;memory&gt; tags.</span>
                 </div>
                 <div class="control-group">
                     <label class="block-label">Max memories in index (0 = unlimited)</label>
@@ -239,27 +247,6 @@
                 </div>
             </div>
 
-        </div>
-
-        <div id="memory" class="tab-content ss-panel">
-            <div class="section">
-                <div class="section-header-row">
-                    <h3 class="section-title">Memory Management</h3>
-                    <span class="help-text" style="margin: 0;">Facts extracted for this chat</span>
-                </div>
-
-                <div id="ss_memory_tabs" class="filter-row">
-                    <!-- Character tabs generated here -->
-                </div>
-
-                <div id="ss_memories_list" class="ss-memories-container">
-                    <!-- Memory blocks with textareas and delete buttons -->
-                </div>
-                
-                <div id="ss_memories_empty_state" class="ss-empty" style="display:none; text-align:center; padding:20px; color:var(--text-muted); border: 1px dashed var(--border-color); border-radius: 5px;">
-                    No memories extracted yet.
-                </div>
-            </div>
         </div>
 
         <div id="snapshots" class="tab-content ss-panel">

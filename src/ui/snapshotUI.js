@@ -4,10 +4,9 @@ import { settingsKey, defaultSettings, extensionName } from '../constants.js';
 import { logDebug } from '../utils/logger.js';
 import { getSSMemoryFileName, writeSSMemoriesFile } from '../storage/memoryFileHandler.js';
 import { getActiveChatId } from '../state/stateManager.js';
-import { buildExtractionPrompt, pruneMemories, parseExtractionResponse } from '../core/engine.js';
+import { buildExtractionPrompt, parseExtractionResponse } from '../core/engine.js';
 import { callSummarisationLLM } from '../core/llmApi.js';
 import { showCombinedEditor } from './editorUI.js';
-import { renderMemoriesList } from './memoryUI.js';
 
 export function renderSnapshotsList(container, chatState, settings) {
     const list = container?.querySelector('#ss_snapshots_list');
@@ -27,8 +26,23 @@ export function renderSnapshotsList(container, chatState, settings) {
     [...snapshots].forEach((snap) => {
         const title = snap.title || `Scene #${snap.id}`;
 
+        let memoriesHtml = '';
+        if (snap.memories && snap.memories.length > 0) {
+            memoriesHtml = '<div class="ss-snapshot-memories" style="margin-top: 10px;">';
+            memoriesHtml += '<div class="section-title" style="margin-bottom: 5px; font-size: 0.85em; color: var(--text-muted);">Extracted Facts</div>';
+            snap.memories.forEach((mem, index) => {
+                memoriesHtml += `
+                    <div class="ss-memory-edit-item" style="margin-bottom: 5px;">
+                        <textarea class="text_pole ss-snap-memory-text" data-snap-id="${snap.id}" data-index="${index}" rows="1" style="width:100%; font-size:0.9em; font-family:inherit;">${mem.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</textarea>
+                        <button class="icon-btn trash ss-delete-snap-memory" title="Remove fact" data-snap-id="${snap.id}" data-index="${index}"><i class="fas fa-trash"></i></button>
+                    </div>
+                `;
+            });
+            memoriesHtml += '</div>';
+        }
+
         const item = document.createElement('div');
-        item.className = 'ss-snapshot-item'; // Default state is collapsed (no 'expanded' class)
+        item.className = 'ss-snapshot-item';
         item.dataset.id = String(snap.id);
 
         item.innerHTML = `
@@ -39,6 +53,7 @@ export function renderSnapshotsList(container, chatState, settings) {
                          <input type="checkbox" class="ss-snapshot-select ss-no-propagate" data-snap-id="${snap.id}" title="Select for consolidation" style="cursor: pointer;">
                          <div class="ss-snapshot-title text_pole textarea_compact" title="${title}">${title}</div>
                          <div class="ss-header-actions ss-no-propagate">
+                               <i class="menu_button fa-solid fa-plus ss-action-icon" title="Add Fact" data-snap-action="add-fact" data-snap-id="${snap.id}"></i>
                                <i class="menu_button fa-solid fa-arrows-rotate ss-action-icon" title="Regenerate" data-snap-action="regen" data-snap-id="${snap.id}"></i>
                                <i class="menu_button fa-solid fa-copy ss-action-icon" title="Copy Text" data-snap-action="copy" data-snap-id="${snap.id}"></i>
                                <i class="menu_button fa-solid fa-trash-can ss-delete-icon ss-action-icon" title="Delete Snapshot" data-snap-action="delete" data-snap-id="${snap.id}"></i>
@@ -52,8 +67,7 @@ export function renderSnapshotsList(container, chatState, settings) {
                     <div class="setting_item">
                         <textarea class="text_pole ss-snap-text" data-id="${snap.id}" rows="6" style="width:100%; font-size:0.9em; font-family:inherit;">${snap.text || ''}</textarea>
                     </div>
-                    </div>
-                    <!-- Save button removed; auto-save is active -->
+                    ${memoriesHtml}
                 </div>
             </div>
         `;
@@ -67,20 +81,18 @@ export async function handleSnapshotAction(action, snapshotId, chatState, contai
     if (snapIndex === -1) return;
     const snap = chatState.snapshots[snapIndex];
 
+    const ctx = getContext();
+    const avatar = ctx?.characters?.[ctx?.characterId]?.avatar
+        // @ts-ignore
+        || (typeof characters !== 'undefined' ? characters[ctx?.characterId]?.avatar : undefined)
+        || ctx?.avatar;
+
     if (action === 'delete') {
         if (confirm(`Delete "${snap.title || 'this snapshot'}"?`)) {
-            const titleToDelete = snap.title;
-
             // 1. Remove snapshot from state
             chatState.snapshots.splice(snapIndex, 1);
             
-            // 2. Remove associated memories from state
-            const hadMemories = chatState.memories?.length > 0;
-            if (hadMemories) {
-                chatState.memories = chatState.memories.filter(m => m.chatLabel !== titleToDelete);
-            }
-            
-            // 3. Re-calculate lastSummarisedIndex
+            // 2. Re-calculate lastSummarisedIndex
             if (chatState.snapshots.length > 0) {
                 const latest = chatState.snapshots[chatState.snapshots.length - 1];
                 chatState.lastSummarisedIndex = latest.toIndex || 0;
@@ -88,19 +100,13 @@ export async function handleSnapshotAction(action, snapshotId, chatState, contai
                 chatState.lastSummarisedIndex = 0;
             }
 
-            // 4. Clean up Data Bank if memories were removed
-            const ctx = getContext();
-            const avatar = ctx?.characters?.[ctx?.characterId]?.avatar
-                // @ts-ignore
-                || (typeof characters !== 'undefined' ? characters[ctx?.characterId]?.avatar : undefined);
-            
-            if (avatar && hadMemories) {
+            // 3. Clean up Data Bank
+            if (avatar) {
                 const fileName = getSSMemoryFileName(getActiveChatId());
-                await writeSSMemoriesFile(avatar, fileName, chatState.memories);
-                renderMemoriesList(container, chatState);
+                await writeSSMemoriesFile(avatar, fileName, chatState.snapshots);
             }
 
-            // 5. Clean up chat marker if it exists
+            // 4. Clean up chat marker if it exists
             const fullChat = ctx?.chat || [];
             let markerRemoved = false;
             for (let i = fullChat.length - 1; i >= 0; i--) {
@@ -141,6 +147,14 @@ export async function handleSnapshotAction(action, snapshotId, chatState, contai
             // @ts-ignore
             icon.style.pointerEvents = '';
         }
+    } else if (action === 'add-fact') {
+        if (!snap.memories) snap.memories = [];
+        snap.memories.push(''); // Add an empty fact
+        renderSnapshotsList(container, chatState, settings);
+        
+        // Ensure the accordion stays open
+        const item = container.querySelector(`.ss-snapshot-item[data-id="${snapshotId}"]`);
+        if (item) item.classList.add('expanded');
     }
 }
 
@@ -178,20 +192,20 @@ export async function regenerateSnapshot(snapshot, settings, chatState) {
 
     try {
         const result = await callSummarisationLLM(prompt);
-        const { summaryText, blocks, title, description } = parseExtractionResponse(result || '');
+        const { summaryText, memories, title, description } = parseExtractionResponse(result || '');
         let cleaned = summaryText;
         if (cleaned.startsWith(prompt.trim())) {
             cleaned = cleaned.substring(prompt.trim().length).trim();
         }
 
         // Use the combined editor to allow reviewing both the regenerated summary and memories
-        const editorResult = await showCombinedEditor(cleaned, blocks, title, description);
+        const editorResult = await showCombinedEditor(cleaned, memories, title, description);
         if (!editorResult) {
             logDebug('log', 'User cancelled regeneration editor');
             return;
         }
 
-        const { summary: editedText, blocks: approvedBlocks, title: editedTitle, description: editedDescription } = editorResult;
+        const { summary: editedText, memories: approvedMemories, title: editedTitle, description: editedDescription } = editorResult;
 
         snapshot.text = editedText;
         if (editedTitle) {
@@ -202,14 +216,13 @@ export async function regenerateSnapshot(snapshot, settings, chatState) {
         if (editedDescription) {
             snapshot.description = editedDescription;
         }
+        snapshot.memories = approvedMemories;
         snapshot.createdAt = Date.now();
         logDebug('log', `Regenerated snapshot ${snapshot.id}`);
 
         // Handle memory extraction for regenerated snapshot
         const memoryEnabled = settings.memoryExtractionEnabled ?? defaultSettings.memoryExtractionEnabled;
-        const totalApprovedBullets = approvedBlocks.reduce((sum, b) => sum + b.bullets.length, 0);
-
-        if (memoryEnabled && totalApprovedBullets > 0) {
+        if (memoryEnabled) {
             const avatar = ctx?.characters?.[ctx?.characterId]?.avatar
                 // @ts-ignore
                 || (typeof characters !== 'undefined' ? characters[ctx?.characterId]?.avatar : undefined)
@@ -217,39 +230,10 @@ export async function regenerateSnapshot(snapshot, settings, chatState) {
             if (avatar) {
                 const chatId = getActiveChatId();
                 const fileName = getSSMemoryFileName(chatId);
-                const sceneLabel = snapshot.title;
-                const timestamp = new Date().toISOString().slice(0, 16).replace('T', ' ');
-
-                // Remove old memories associated with this snapshot
-                chatState.memories = chatState.memories.filter(m => m.chatLabel !== sceneLabel);
-
-                let blockMarkdowns = [];
-                let memoriesAdded = 0;
-
-                for (const block of approvedBlocks) {
-                    const bulletsText = `- ${block.header}\n` + block.bullets.map(b => `- ${b}`).join('\n');
-                    const newBlock = `<memory chat="${sceneLabel}" date="${timestamp}">\n${bulletsText}\n</memory>`;
-                    blockMarkdowns.push(newBlock);
-
-                    const newMemories = block.bullets.map(text => ({
-                        id: ++chatState.memoryCounter,
-                        text,
-                        chatLabel: sceneLabel,
-                        blockHeader: block.header,
-                        characters: block.characters,
-                        extractedAt: snapshot.toIndex || 0,
-                        createdAt: Date.now(),
-                        source: 'extracted',
-                    }));
-                    chatState.memories.push(...newMemories);
-                    memoriesAdded += newMemories.length;
-                }
 
                 // Completely rewrite the file to clear out old deleted memories and add the new ones
-                await writeSSMemoriesFile(avatar, fileName, chatState.memories);
-                pruneMemories(chatState, settings);
-
-                logDebug('log', `Regenerated and persisted ${memoriesAdded} memories for ${sceneLabel}`);
+                await writeSSMemoriesFile(avatar, fileName, chatState.snapshots);
+                logDebug('log', `Regenerated and persisted memories for ${snapshot.title}`);
             }
         }
     } catch (err) {

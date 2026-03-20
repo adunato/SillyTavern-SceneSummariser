@@ -7,7 +7,7 @@ Draft
 - Rework the memory data structure: tie extracted memories directly to the Scene Snapshot they originate from, removing the concept of standalone "Memory Blocks".
 - Simplify the LLM prompt and output parsing to generate a single flat list of facts per scene.
 - Streamline the UI: remove the dedicated "Memories" tab and place memory management directly inside the revised Scene Snapshot accordion.
-- Simplify the Review Scene Extraction popup to handle a flat list of facts.
+- Simplify the Review Scene Extraction popup to handle a flat list of facts  And summary details as per current design 
 - Add a "Reset Prompt" button to all prompt configuration fields to easily restore default values.
 
 ## Proposed Solution & Implementation Plan

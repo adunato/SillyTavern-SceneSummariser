@@ -242,24 +242,7 @@
 }
 .st-extension .badge.active { border-color: var(--text-main); color: var(--text-main); }
 
-/* Memory Tab Specific Styles */
-.st-extension .filter-row { display: flex; gap: 8px; margin-bottom: 12px; align-items: center; flex-wrap: wrap; }
-.st-extension .memory-block {
-    background-color: var(--bg-panel); border: 1px solid var(--border-color);
-    border-radius: 4px; margin-bottom: 12px; overflow: hidden;
-}
-.st-extension .memory-header {
-    background-color: rgba(0,0,0,0.2); padding: 8px 12px;
-    display: flex; justify-content: space-between; align-items: center;
-    font-weight: 600; font-size: 0.9em; border-bottom: 1px solid var(--border-color);
-}
-.st-extension .memory-item {
-    padding: 10px 12px; display: flex; justify-content: space-between; align-items: flex-start;
-    gap: 12px; font-size: 0.85em; border-bottom: 1px solid var(--border-color);
-    background-color: var(--bg-panel);
-}
-.st-extension .memory-item:last-child { border-bottom: none; }
-.st-extension .memory-text { flex-grow: 1; line-height: 1.4; color: var(--text-main); }
+/* Memory Specific Styles (Deleted) */
 
 /* Ensure the Summarise button matches Guided Generations styling even if GG CSS isn't loaded */
 .ss-action-button {

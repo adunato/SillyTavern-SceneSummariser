@@ -109,16 +109,26 @@ export async function appendSSMemoriesBlock(avatar, fileName, newBlockMarkdown) 
  * Used after manual edits or deletions.
  * @param {string} avatar
  * @param {string} fileName
- * @param {object[]} memories List of memory objects from chatState.
+ * @param {object[]} snapshots List of snapshot objects from chatState.
  */
-export async function writeSSMemoriesFile(avatar, fileName, memories) {
-    console.log(`[${extensionName}] writeSSMemoriesFile called for avatar: ${avatar}, fileName: ${fileName}, memories count: ${memories.length}`);
+export async function writeSSMemoriesFile(avatar, fileName, snapshots) {
+    console.log(`[${extensionName}] writeSSMemoriesFile called for avatar: ${avatar}, fileName: ${fileName}`);
     if (!extension_settings.character_attachments) extension_settings.character_attachments = {};
     if (!Array.isArray(extension_settings.character_attachments[avatar])) {
         extension_settings.character_attachments[avatar] = [];
     }
 
-    if (!memories.length) {
+    const blocks = [];
+
+    for (const snapshot of snapshots) {
+        if (snapshot.memories && snapshot.memories.length > 0) {
+            const timestamp = new Date(snapshot.createdAt || Date.now()).toISOString().slice(0, 16).replace('T', ' ');
+            const bullets = snapshot.memories.map(t => `- ${t}`).join('\n');
+            blocks.push(`<memory chat="${snapshot.title}" date="${timestamp}">\n${bullets}\n</memory>`);
+        }
+    }
+
+    if (!blocks.length) {
         // If no memories, delete the file
         const oldAttachment = findSSMemoryAttachment(avatar, fileName);
         if (oldAttachment) {
@@ -129,28 +139,6 @@ export async function writeSSMemoriesFile(avatar, fileName, memories) {
             saveSettingsDebounced();
         }
         return;
-    }
-
-    // Group memories by scene label and then by block header
-    const blocks = [];
-    const grouped = {};
-    for (const m of memories) {
-        const sceneLabel = m.chatLabel || 'Memory Index';
-        const blockHeader = m.blockHeader || '[General]';
-        
-        if (!grouped[sceneLabel]) grouped[sceneLabel] = {};
-        if (!grouped[sceneLabel][blockHeader]) grouped[sceneLabel][blockHeader] = [];
-        
-        grouped[sceneLabel][blockHeader].push(m.text);
-    }
-
-    for (const [sceneLabel, headers] of Object.entries(grouped)) {
-        const timestamp = new Date().toISOString().slice(0, 16).replace('T', ' ');
-        let allBulletsText = '';
-        for (const [header, texts] of Object.entries(headers)) {
-            allBulletsText += `- ${header}\n` + texts.map(t => `- ${t}`).join('\n') + '\n';
-        }
-        blocks.push(`<memory chat="${sceneLabel}" date="${timestamp}">\n${allBulletsText.trim()}\n</memory>`);
     }
 
     const newContent = blocks.join('\n\n');
