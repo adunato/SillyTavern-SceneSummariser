@@ -9,7 +9,7 @@ export function parseExtractionResponse(raw) {
     const summaryMatch = text.match(/<summary>([\s\S]*?)<\/summary>/i);
     const titleMatch = text.match(/<title>([\s\S]*?)<\/title>/i);
     const descMatch = text.match(/<description>([\s\S]*?)<\/description>/i);
-    const memoryBlocksRaw = [...text.matchAll(/<memor(?:y|ies)>([\s\S]*?)<\/memor(?:y|ies)>/gi)];
+    const memoryMatch = text.match(/<memor(?:y|ies)>([\s\S]*?)<\/memor(?:y|ies)>/i);
 
     let summaryText = summaryMatch ? summaryMatch[1].trim() : text;
     let title = titleMatch ? titleMatch[1].trim() : '';
@@ -26,63 +26,21 @@ export function parseExtractionResponse(raw) {
     summaryText = summaryText.replace(/<\/?title>/gi, '').trim();
     summaryText = summaryText.replace(/<\/?description>/gi, '').trim();
     
-    const blocks = [];
+    const memories = [];
 
-    for (const blockMatch of memoryBlocksRaw) {
-        const lines = blockMatch[1].split('\n').map(l => l.trim()).filter(l => l);
-        if (lines.length === 0 || lines.some(l => l === 'NO_NEW_MEMORIES')) continue;
-
-        let currentBlock = null;
-
-        for (const line of lines) {
-            if (line.startsWith('- ') || line.startsWith('* ')) {
-                const bulletText = line.slice(2).trim();
-                
-                // Check if this bullet is a header: starts with [
-                if (bulletText.startsWith('[')) {
-                    // Start a new block
-                    if (currentBlock && currentBlock.bullets.length > 0) {
-                        blocks.push(currentBlock);
-                    }
-                    
-                    let characters = [];
-                    const bracketMatch = bulletText.match(/^\[(.*?)\]/);
-                    if (bracketMatch) {
-                        const inside = bracketMatch[1];
-                        const charPart = inside.split(/—|-/)[0]; // get text before the dash
-                        if (charPart) {
-                            characters = charPart.split(',').map(c => c.trim()).filter(c => c);
-                        }
-                    }
-
-                    currentBlock = {
-                        header: bulletText,
-                        characters: characters,
-                        bullets: []
-                    };
-                    continue;
-                }
-                
-                // If it's not a header, add to current block
-                if (currentBlock) {
-                    currentBlock.bullets.push(bulletText);
-                } else {
-                    // Fallback for bullets without a header
-                    currentBlock = {
-                        header: '[General]',
-                        characters: [],
-                        bullets: [bulletText]
-                    };
+    if (memoryMatch) {
+        const lines = memoryMatch[1].split('\n').map(l => l.trim()).filter(l => l);
+        if (!lines.some(l => l === 'NO_NEW_MEMORIES')) {
+            for (const line of lines) {
+                if (line.startsWith('- ') || line.startsWith('* ')) {
+                    const bulletText = line.slice(2).trim();
+                    if (bulletText) memories.push(bulletText);
                 }
             }
         }
-        
-        if (currentBlock && currentBlock.bullets.length > 0) {
-            blocks.push(currentBlock);
-        }
     }
     
-    return { summaryText, blocks, title, description };
+    return { summaryText, memories, title, description };
 }
 
 /**
@@ -104,8 +62,11 @@ export function buildExtractionPrompt(transcript, settings, previousSummaryText,
         ? (settings.memoryPrompt || defaultSettings.memoryPrompt)
         : (settings.summaryPrompt || defaultSettings.summaryPrompt);
 
-    const existingMemories = (chatState.memories && chatState.memories.length > 0)
-        ? chatState.memories.map(m => `- ${m.text}`).join('\n')
+    // Extract memories from all snapshots and flatten them
+    const allMemories = (chatState.snapshots || []).flatMap(s => s.memories || []);
+    
+    const existingMemories = allMemories.length > 0
+        ? allMemories.map(m => `- ${m}`).join('\n')
         : 'None';
 
     return template
@@ -114,17 +75,6 @@ export function buildExtractionPrompt(transcript, settings, previousSummaryText,
         .replace(/\{\{last_messages\}\}/g, transcript || '(no messages)')
         .replace(/\{\{charName\}\}/g, charName)
         .replace(/\{\{existingMemories\}\}/g, existingMemories);
-}
-
-/**
- * Prunes the oldest memories from chatState.memories[] when maxMemories is set.
- * @param {object} chatState
- * @param {object} settings
- */
-export function pruneMemories(chatState, settings) {
-    const max = Number(settings.maxMemories ?? defaultSettings.maxMemories);
-    if (max <= 0) return;
-    while (chatState.memories.length > max) chatState.memories.shift();
 }
 
 export function getLatestSnapshot(chatState) {
@@ -144,33 +94,4 @@ export function buildSummaryText(chatState, settings) {
     }
     const latest = getLatestSnapshot(chatState);
     return latest ? `${latest.title}: ${latest.text}` : '';
-}
-
-/**
- * Purges memories that are not associated with any existing snapshot.
- * Useful for cleaning up orphans from older versions or failed deletions.
- * @param {object} chatState 
- */
-export async function reconcileMemories(chatState) {
-    if (!chatState.memories?.length) return;
-
-    const snapshotTitles = new Set(chatState.snapshots.map(s => s.title));
-    const initialCount = chatState.memories.length;
-    
-    // Filter out memories whose label is missing or doesn't match an existing snapshot
-    chatState.memories = chatState.memories.filter(m => m.chatLabel && snapshotTitles.has(m.chatLabel));
-
-    if (chatState.memories.length !== initialCount) {
-        logDebug('log', `Reconciliation: Purged ${initialCount - chatState.memories.length} orphaned memories.`);
-        const ctx = getContext();
-        // @ts-ignore
-        const avatar = ctx?.characters?.[ctx?.characterId]?.avatar
-            // @ts-ignore
-            || (typeof characters !== 'undefined' ? characters[ctx?.characterId]?.avatar : undefined);
-        
-        if (avatar) {
-            const fileName = getSSMemoryFileName(getActiveChatId());
-            await writeSSMemoriesFile(avatar, fileName, chatState.memories);
-        }
-    }
 }

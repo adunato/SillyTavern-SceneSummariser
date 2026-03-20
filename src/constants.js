@@ -41,7 +41,7 @@ Your output must contain exactly four components, in this exact order, with abso
 1. A single <title> block containing a brief title for the scene.
 2. A single <description> block containing a short description of the scene.
 3. A single <summary> block containing the plot summary.
-4. One or more <memory> blocks containing bulleted lists of extracted memories (or exactly NO_NEW_MEMORIES inside a single block if nothing significant occurred).
+4. A single <memory> block containing a bulleted list of extracted facts (or exactly NO_NEW_MEMORIES inside the block if nothing significant occurred).
 
 Example Output Structure:
 
@@ -55,7 +55,6 @@ Short description of the scene.
 Raw summary text goes here...
 </summary>
 <memory>
-* [{{charName}}, OtherNames — short description]
 * Memory bullet 1
 * Memory bullet 2
 </memory>
@@ -70,10 +69,8 @@ Raw summary text goes here...
 1. Extract only NEW facts, backstory reveals, relationship shifts, and emotional turning points NOT already covered by 'Existing Memories'.
 2. Write in past tense, third person. Always refer to {{charName}} by name. No emojis. Do not quote dialogue verbatim.
 3. Write about WHAT HAPPENED (outcomes), not the conversation itself or the step-by-step process. Never write "she told him about X" — write the actual fact: "X happened".
-4. Group memories by encounter. Use ONE <memory> block per encounter/scene.
-5. Start each block with a topic tag as the first bullet: "- [{{charName}}, OtherNames — short description]".
-6. HARD LIMIT: Max 5 bullet points per block (excluding the topic tag). Keep only the most significant outcomes.
-7. DO NOT EXTRACT: Meta-narration, step-by-step accounts, scene-setting, temporary physical states, or trivial details. Ask yourself: "Would {{charName}} bring this up unprompted weeks later?"
+4. HARD LIMIT: Max 5 bullet points. Keep only the most significant outcomes.
+5. DO NOT EXTRACT: Meta-narration, step-by-step accounts, scene-setting, temporary physical states, or trivial details. Ask yourself: "Would {{charName}} bring this up unprompted weeks later?"
 
 NEGATIVE MEMORY EXAMPLE (Do NOT write play-by-play like this):
 <memory>
@@ -85,7 +82,6 @@ NEGATIVE MEMORY EXAMPLE (Do NOT write play-by-play like this):
 
 POSITIVE MEMORY EXAMPLE (Summarize the outcome):
 <memory>
-* [Alex, Flux — adoption day and settling in]
 * Alex adopted Flux, who immediately bonded with a custom Roomba in the apartment.
 * Flux's first meal of premium salmon pâté triggered his first purr in the new home.
 </memory>`,
@@ -99,9 +95,6 @@ export const chatStateDefaults = {
     sceneBreakMarkerId: '',
     sceneBreakMesId: null,
     snapshots: [],
-    // Memory extraction (§2)
-    memories: [],
-    memoryCounter: 0,
 };
 
 export const legacyStateKeys = Object.keys(chatStateDefaults);
@@ -113,5 +106,4 @@ export const state = {
     currentAbortController: null,
     debugMessages: [],
     settingsContainer: null,
-    currentMemoryTab: 'All',
 };

@@ -1,7 +1,7 @@
 import { extensionName, settingsKey, defaultSettings, state } from '../constants.js';
 import { logDebug } from '../utils/logger.js';
 import { getChatState } from '../state/stateManager.js';
-import { buildSummaryText, reconcileMemories } from '../core/engine.js';
+import { buildSummaryText } from '../core/engine.js';
 import { applyInjection, updateInjectionVisibility, updateContextControlVisibility } from '../core/injector.js';
 import { getSSMemoryFileName, writeSSMemoriesFile } from '../storage/memoryFileHandler.js';
 import { extension_settings, renderExtensionTemplateAsync, getContext } from '../../../../../extensions.js';
@@ -9,7 +9,6 @@ import { saveSettingsDebounced } from '../../../../../../script.js';
 import { ConnectionManagerRequestService } from '../../../../shared.js';
 // We will need to import the other UI components and button handlers
 import { handleSnapshotAction, renderSnapshotsList, handleSnapshotSelectionChange } from './snapshotUI.js';
-import { renderMemoriesList } from './memoryUI.js';
 import { onSummariseClick, onConsolidateClick, onBatchSummariseClick } from './buttons.js';
 
 export function togglePanel(container, selector) {
@@ -150,109 +149,76 @@ export function bindSettingsUI(container) {
             saveSettingsDebounced();
         }
 
-        // Memory actions
-        const memoryBtn = event.target.closest('[data-memory-action]');
-        if (memoryBtn) {
-            const action = memoryBtn.dataset.memoryAction;
-            const id = Number(memoryBtn.dataset.memoryId);
-            const chatState = getChatState();
-            if (action === 'delete') {
-                chatState.memories = chatState.memories.filter(m => m.id !== id);
-                const ctx = getContext();
-                const avatar = ctx?.characters?.[ctx?.characterId]?.avatar
-                    // @ts-ignore
-                    || (typeof characters !== 'undefined' ? characters[ctx?.characterId]?.avatar : undefined);
-                if (avatar) {
-                    const fileName = getSSMemoryFileName(chatState.chatId);
-                    await writeSSMemoriesFile(avatar, fileName, chatState.memories);
+        // Reset Prompt Buttons
+        const resetBtn = event.target.closest('#ss_reset_summaryPrompt, #ss_reset_consolidationPrompt, #ss_reset_memoryPrompt');
+        if (resetBtn) {
+            const id = resetBtn.id;
+            let key = '';
+            if (id === 'ss_reset_summaryPrompt') key = 'summaryPrompt';
+            else if (id === 'ss_reset_consolidationPrompt') key = 'consolidationPrompt';
+            else if (id === 'ss_reset_memoryPrompt') key = 'memoryPrompt';
+            
+            if (key) {
+                if (confirm(`Reset ${key} to default?`)) {
+                    extension_settings[settingsKey][key] = defaultSettings[key];
+                    saveSettingsDebounced();
+                    updateSettingsUI(container);
                 }
-                renderMemoriesList(container, chatState);
-                saveSettingsDebounced();
             }
         }
 
-        const deleteBlockBtn = event.target.closest('.ss-delete-full-block');
-        if (deleteBlockBtn) {
-            const headerToDelete = deleteBlockBtn.dataset.header;
-            if (confirm(`Delete the entire block "${headerToDelete}"?`)) {
-                const chatState = getChatState();
-                chatState.memories = chatState.memories.filter(m => m.blockHeader !== headerToDelete);
+        // Delete Fact from Snapshot
+        const deleteMemoryBtn = event.target.closest('.ss-delete-snap-memory');
+        if (deleteMemoryBtn) {
+            const snapId = Number(deleteMemoryBtn.dataset.snapId);
+            const index = Number(deleteMemoryBtn.dataset.index);
+            const chatState = getChatState();
+            const snap = chatState.snapshots.find(s => s.id === snapId);
+            if (snap && snap.memories) {
+                snap.memories.splice(index, 1);
                 
                 const ctx = getContext();
                 const avatar = ctx?.characters?.[ctx?.characterId]?.avatar
                     // @ts-ignore
                     || (typeof characters !== 'undefined' ? characters[ctx?.characterId]?.avatar : undefined);
                 if (avatar) {
-                    const fileName = getSSMemoryFileName(chatState.chatId);
-                    await writeSSMemoriesFile(avatar, fileName, chatState.memories);
+                    const fileName = getSSMemoryFileName(chatState.chatId || getActiveChatId());
+                    writeSSMemoriesFile(avatar, fileName, chatState.snapshots).catch(err => logDebug('error', 'writeSSMemoriesFile', err));
                 }
-                renderMemoriesList(container, chatState);
+                
                 saveSettingsDebounced();
+                renderSnapshotsList(container, chatState, extension_settings[settingsKey]);
+                
+                // Re-open accordion after render
+                const item = container.querySelector(`.ss-snapshot-item[data-id="${snapId}"]`);
+                if (item) item.classList.add('expanded');
             }
         }
     });
 
-    // 2b) Auto-save memory text and block headers
+    // 2b) Auto-save snapshot text and descriptions
     container.addEventListener('input', (event) => {
-        if (event.target.classList.contains('ss-memory-text')) {
-            const id = Number(event.target.dataset.id);
+        if (event.target.classList.contains('ss-snap-memory-text')) {
+            const snapId = Number(event.target.dataset.snapId);
+            const index = Number(event.target.dataset.index);
             const chatState = getChatState();
-            const memory = chatState.memories.find(m => m.id === id);
-            if (memory) {
-                memory.text = event.target.value;
+            const snap = chatState.snapshots.find(s => s.id === snapId);
+            if (snap && snap.memories) {
+                snap.memories[index] = event.target.value;
                 saveSettingsDebounced();
-                
-                clearTimeout(memory.rewriteTimeout);
-                memory.rewriteTimeout = setTimeout(async () => {
+
+                clearTimeout(snap.memoryRewriteTimeout);
+                snap.memoryRewriteTimeout = setTimeout(() => {
                     const ctx = getContext();
                     const avatar = ctx?.characters?.[ctx?.characterId]?.avatar
                         // @ts-ignore
                         || (typeof characters !== 'undefined' ? characters[ctx?.characterId]?.avatar : undefined);
                     if (avatar) {
-                        const fileName = getSSMemoryFileName(chatState.chatId);
-                        await writeSSMemoriesFile(avatar, fileName, chatState.memories);
+                        const fileName = getSSMemoryFileName(chatState.chatId || getActiveChatId());
+                        writeSSMemoriesFile(avatar, fileName, chatState.snapshots).catch(err => logDebug('error', 'writeSSMemoriesFile', err));
                     }
                 }, 2000);
             }
-            return;
-        }
-
-        if (event.target.classList.contains('ss-memory-block-header')) {
-            const originalHeader = event.target.dataset.originalHeader;
-            const newHeader = event.target.value.trim() || '[Unknown]';
-            const chatState = getChatState();
-            
-            let characters = [];
-            const bracketMatch = newHeader.match(/^\[(.*?)\]/);
-            if (bracketMatch) {
-                const inside = bracketMatch[1];
-                const charPart = inside.split(/—|-/)[0]; // get text before the dash
-                if (charPart) {
-                    characters = charPart.split(',').map(c => c.trim()).filter(c => c);
-                }
-            }
-
-            chatState.memories.forEach(m => {
-                if (m.blockHeader === originalHeader) {
-                    m.blockHeader = newHeader;
-                    m.characters = characters;
-                }
-            });
-            event.target.dataset.originalHeader = newHeader; // update original to allow continuous editing
-            saveSettingsDebounced();
-
-            // Store rewriteTimeout on the chatState object to debounce across the whole file
-            clearTimeout(chatState.headerRewriteTimeout);
-            chatState.headerRewriteTimeout = setTimeout(async () => {
-                const ctx = getContext();
-                const avatar = ctx?.characters?.[ctx?.characterId]?.avatar
-                    // @ts-ignore
-                    || (typeof characters !== 'undefined' ? characters[ctx?.characterId]?.avatar : undefined);
-                if (avatar) {
-                    const fileName = getSSMemoryFileName(chatState.chatId);
-                    await writeSSMemoriesFile(avatar, fileName, chatState.memories);
-                }
-            }, 2000);
             return;
         }
 
@@ -358,9 +324,6 @@ export function updateSettingsUI(container) {
     const settings = extension_settings[settingsKey] || defaultSettings;
     const chatState = getChatState();
 
-    // Run reconciliation to clear orphans
-    reconcileMemories(chatState);
-
     const setValue = (selector, val) => {
         const el = container.querySelector(selector);
         if (!el) return;
@@ -442,7 +405,6 @@ export function updateSettingsUI(container) {
     if (currentSummary) currentSummary.value = buildSummaryText(chatState, settings);
 
     renderSnapshotsList(container, chatState, settings);
-    renderMemoriesList(container, chatState);
 
     applyInjection();
     logDebug('log', 'Settings UI updated');
