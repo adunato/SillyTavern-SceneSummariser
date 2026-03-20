@@ -109,11 +109,23 @@ export async function onSummariseClick() {
     state.currentAbortController = new AbortController();
 
     const button = document.getElementById('ss_summarise_button');
+    const settingsButton = document.getElementById('ss_settings_summarise_button');
+    
     const originalTitle = button?.title;
+    const originalSettingsHtml = settingsButton?.innerHTML;
+
     if (button) {
         button.classList.remove('fa-clapperboard');
         button.classList.add('fa-stop', 'ss-stop-btn');
         button.title = 'Stop Summarising';
+        button.style.color = 'var(--smart-theme-red, #cc4444)';
+    }
+    
+    if (settingsButton) {
+        settingsButton.classList.add('ss-stop-btn');
+        settingsButton.innerHTML = '<i class="fa-solid fa-stop"></i> Stop Summarising...';
+        settingsButton.style.borderColor = 'var(--smart-theme-red, #cc4444)';
+        settingsButton.style.color = 'var(--smart-theme-red, #cc4444)';
     }
     logDebug('log', 'Summarise clicked');
 
@@ -288,6 +300,13 @@ export async function onSummariseClick() {
             button.classList.remove('fa-stop', 'ss-stop-btn');
             button.classList.add('fa-clapperboard');
             button.title = originalTitle || 'Summarise Scene';
+            button.style.color = '';
+        }
+        if (settingsButton) {
+            settingsButton.classList.remove('ss-stop-btn');
+            settingsButton.innerHTML = originalSettingsHtml || '<i class="fa-solid fa-file-signature"></i> Summarise Scene';
+            settingsButton.style.borderColor = '';
+            settingsButton.style.color = '';
         }
         state.isSummarising = false;
         state.currentAbortController = null;
