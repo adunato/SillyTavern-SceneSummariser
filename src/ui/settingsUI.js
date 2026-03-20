@@ -301,7 +301,7 @@ export function bindSettingsUI(container) {
         logDebug('log', 'Debug logs cleared');
     });
 
-    const summariseButton = container.querySelector('#ss_summarise_button');
+    const summariseButton = container.querySelector('#ss_settings_summarise_button');
     if (summariseButton) {
         summariseButton.addEventListener('click', onSummariseClick);
     }
