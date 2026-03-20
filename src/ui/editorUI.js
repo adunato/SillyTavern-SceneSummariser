@@ -36,15 +36,17 @@ export async function showCombinedEditor(initialSummary, initialBlocks, initialT
     const renderMemoryBlock = (blockData = { header: '[Character — topic]', characters: [], bullets: [''] }) => {
         // @ts-ignore
         const blockEl = $(`
-            <div class="ss-memory-block-item" style="border: 1px solid var(--grey40); border-radius: 5px; padding: 5px; margin-bottom: 8px; background: var(--grey30);">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 5px;">
-                    <input type="text" class="text_pole ss-block-header-input" value="${blockData.header.replace(/"/g, '&quot;')}" style="flex: 1; font-weight: bold;" />
-                    <i class="fa-solid fa-trash-can ss-delete-icon ss-action-icon ss-delete-block" title="Remove entire block" style="margin-left: 5px;"></i>
+            <div class="memory-block ss-memory-block-item" style="margin-bottom: 8px;">
+                <div class="memory-header">
+                    <input type="text" class="text_pole ss-block-header-input" value="${blockData.header.replace(/"/g, '&quot;')}" style="flex: 1; font-weight: bold; background:transparent; border:none; margin-right:5px; padding:0; height:auto; min-height:auto;" />
+                    <button class="icon-btn trash ss-delete-block" title="Remove entire block" style="margin-left: 5px;"><i class="fas fa-trash"></i></button>
                 </div>
                 <div class="ss-block-bullets"></div>
-                <button class="menu_button interactable ss-add-bullet-btn" style="font-size: 0.7em; padding: 2px 6px; margin-top: 5px;">
-                    <i class="fa-solid fa-plus"></i> Add Fact
-                </button>
+                <div style="padding: 5px 12px 10px 12px;">
+                    <button class="btn interactable ss-add-bullet-btn" style="font-size: 0.8em; padding: 4px 8px;">
+                        <i class="fa-solid fa-plus"></i> Add Fact
+                    </button>
+                </div>
             </div>
         `);
 
@@ -55,7 +57,7 @@ export async function showCombinedEditor(initialSummary, initialBlocks, initialT
             const item = $(`
                 <div class="ss-memory-edit-item" style="margin-bottom: 3px;">
                     <textarea class="text_pole" placeholder="Enter a fact...">${text}</textarea>
-                    <i class="fa-solid fa-trash-can ss-delete-icon ss-action-icon ss-delete-bullet" title="Remove fact"></i>
+                    <button class="icon-btn trash ss-delete-bullet" title="Remove fact"><i class="fas fa-trash"></i></button>
                 </div>
             `);
             item.find('.ss-delete-bullet').on('click', () => {

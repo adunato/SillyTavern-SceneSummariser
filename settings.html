@@ -1,182 +1,189 @@
-<div id="ss_drawer" class="inline-drawer SillyTavern-SceneSummariser-settingslist">
-    <div class="inline-drawer-toggle inline-drawer-header">
-        <b>Scene Summariser</b>
-        <div class="inline-drawer-icon fa-solid fa-circle-chevron-down right"></div>
+<div class="st-extension inline-drawer SillyTavern-SceneSummariser-settingslist">
+    <div class="extension-header inline-drawer-header inline-drawer-toggle">
+        <span>Scene Summariser</span>
+        <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down right"></div>
     </div>
 
     <div class="inline-drawer-content">
-        <div class="setting_item"
-            style="display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom: 10px;">
-            <label style="display:flex; align-items:center; gap:8px; margin:0;">
-                <input type="checkbox" id="ss_enabled" name="enabled" class="ss-setting-input">
-                <span>Enable</span>
+        <div class="global-enable-row">
+            <label class="switch-container">
+                <div class="switch">
+                    <input type="checkbox" id="ss_enabled" name="enabled" class="ss-setting-input">
+                    <span class="slider"></span>
+                </div>
+                <span class="switch-label">Enable</span>
             </label>
-            <div class="ss-header-buttons" style="display:flex; gap:5px; flex-wrap:wrap;">
-                <button type="button" class="menu_button" data-ss-action="toggle-settings"><i
-                        class="fa-solid fa-gear"></i> Settings</button>
-                <button type="button" class="menu_button" data-ss-action="toggle-memory"><i
-                        class="fa-solid fa-brain"></i> Memory</button>
-                <button type="button" class="menu_button" data-ss-action="toggle-summary"><i
-                        class="fa-solid fa-list"></i> Snapshots</button>
-            </div>
+            <div style="flex-grow: 1;"></div>
+            <button id="ss_summarise_button" class="btn interactable" style="font-size: 0.9em; padding: 4px 8px; margin-right: 10px;">
+                <i class="fa-solid fa-file-signature"></i> Summarise Scene
+            </button>
         </div>
 
-        <div id="ss_settings_panel" class="ss-panel"
-            style="display:none; padding: 10px; background: var(--grey10); border-radius: 5px; margin-bottom: 10px;">
-            <div class="settings_section">
-                <h4>General &amp; Generation</h4>
-                <div class="setting_item">
-                    <label for="ss_connectionProfile">Connection Profile</label>
-                    <select id="ss_connectionProfile" class="text_pole"
-                        title="Select a dedicated Connection Profile for summarisation. Leave blank to use the main chat API."></select>
-                    <small style="display:block; margin-top:4px; opacity:0.7;">Select a Connection Manager profile to
-                        use a dedicated model/API for summarisation. Blank = main chat API.</small>
+        <div class="tabs">
+            <button type="button" class="tab active" data-tab="settings"><i class="fas fa-cog"></i> Settings</button>
+            <button type="button" class="tab" data-tab="memory"><i class="fas fa-brain"></i> Memory</button>
+            <button type="button" class="tab" data-tab="snapshots"><i class="fas fa-list"></i> Snapshots</button>
+        </div>
+
+        <div id="settings" class="tab-content active ss-panel">
+            <div class="section">
+                <div class="section-header-row">
+                    <h3 class="section-title">General & Generation</h3>
                 </div>
-                <div class="setting_item">
-                    <label>Summary Prompt</label>
-                    <textarea id="ss_summaryPrompt" name="summaryPrompt" class="ss-setting-input text_pole" rows="3"
-                        placeholder="Prompt used to generate summaries..."></textarea>
-                    <small id="ss_summaryPrompt_hint" style="display:block; margin-top:4px; opacity:0.7;">Prompt used to generate summaries.</small>
+                <div class="control-group">
+                    <label class="block-label" for="ss_connectionProfile">Connection Profile</label>
+                    <select id="ss_connectionProfile"></select>
+                    <span class="help-text">Select a Connection Manager profile to use a dedicated model/API for summarisation. Blank = main chat API.</span>
                 </div>
-                <div class="setting_item">
-                    <label>Consolidation Prompt</label>
-                    <textarea id="ss_consolidationPrompt" name="consolidationPrompt" class="ss-setting-input text_pole" rows="3"
-                        placeholder="Prompt used to merge multiple summaries..." title="Prompt used when consolidating multiple scenes down into one summary. Context will be a list of the summaries of the selected scenes."></textarea>
+                <div class="control-group">
+                    <label class="block-label">Summary Prompt</label>
+                    <textarea id="ss_summaryPrompt" name="summaryPrompt" class="ss-setting-input" rows="2" placeholder="Prompt used to generate summaries..."></textarea>
+                    <span id="ss_summaryPrompt_hint" class="help-text">Prompt used to generate summaries.</span>
+                </div>
+                <div class="control-group">
+                    <label class="block-label">Consolidation Prompt</label>
+                    <textarea id="ss_consolidationPrompt" name="consolidationPrompt" class="ss-setting-input" rows="3" placeholder="Prompt used to merge multiple summaries..."></textarea>
+                </div>
+            </div>
+
+            <div class="section">
+                <div class="section-header-row">
+                    <h3 class="section-title">Memory Extraction</h3>
+                </div>
+                <label class="switch-container">
+                    <div class="switch">
+                        <input type="checkbox" id="ss_memoryExtractionEnabled" name="memoryExtractionEnabled" class="ss-setting-input">
+                        <span class="slider"></span>
+                    </div>
+                    <span class="switch-label-text">Enable memory extraction</span>
+                </label>
+                <span class="help-text" style="margin-bottom: 12px; display: block;">Co-extract atomic facts alongside scene summaries — stored in the Data Bank for Vector Storage retrieval.</span>
+                
+                <div class="control-group">
+                    <label class="block-label">Extraction Prompt (Combined)</label>
+                    <textarea id="ss_memoryPrompt" name="memoryPrompt" class="ss-setting-input" rows="4"></textarea>
+                    <span id="ss_memoryPrompt_hint" class="help-text">This prompt replaces the Summary Prompt when extraction is enabled. Must include &lt;summary&gt; and &lt;memories&gt; tags.</span>
+                </div>
+                <div class="control-group">
+                    <label class="block-label">Max memories in index (0 = unlimited)</label>
+                    <input type="number" id="ss_maxMemories" name="maxMemories" class="ss-setting-input" min="0" step="1">
+                    <span class="help-text">Limits the number of recent memories kept in the chat metadata index.</span>
+                </div>
+            </div>
+
+            <div class="section">
+                <div class="section-header-row">
+                    <h3 class="section-title">Advanced Control</h3>
+                </div>
+                <div class="range-wrapper">
+                    <div class="range-header">
+                        <span>Word limit</span>
+                        <span class="range-value" id="ss_summaryWords_value">200</span>
+                    </div>
+                    <input type="range" id="ss_summaryWords" name="summaryWords" class="ss-setting-input" min="50" max="1000" step="10">
+                </div>
+
+                <div class="control-group">
+                    <label class="switch-container">
+                        <div class="switch">
+                            <input type="checkbox" id="ss_storeHistory" name="storeHistory" class="ss-setting-input">
+                            <span class="slider"></span>
+                        </div>
+                        <span class="switch-label-text">Store History</span>
+                    </label>
+                    <span class="help-text">If enabled, all stored summaries will be injected. If disabled, only the latest summary is injected.</span>
+                </div>
+
+                <div class="range-wrapper">
+                    <div class="range-header">
+                        <span>Summary History Depth</span>
+                        <span class="range-value" id="ss_summaryHistoryDepth_value">0</span>
+                    </div>
+                    <input type="range" id="ss_summaryHistoryDepth" name="summaryHistoryDepth" class="ss-setting-input" min="0" max="20" step="1">
+                    <span class="help-text">Number of previous snapshots to include as context for the LLM when generating a new scene summary. 0 = All.</span>
+                </div>
+
+                <div class="control-group">
+                    <label class="block-label">Max Snapshots History</label>
+                    <input type="number" id="ss_maxSummaries" name="maxSummaries" class="ss-setting-input" min="0" max="50">
+                    <span class="help-text">Number of recent snapshots to inject into the prompt (0 for all).</span>
+                </div>
+
+                <div class="range-wrapper" style="margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border-color);">
+                    <div class="range-header">
+                        <span>Batch Size (Messages)</span>
+                        <span class="range-value" id="ss_batchSize_value">50</span>
+                    </div>
+                    <input type="range" id="ss_batchSize" name="batchSize" class="ss-setting-input" min="10" max="200" step="5">
+                    <span class="help-text">Number of messages to summarize in each batch run.</span>
+                </div>
+
+                <div class="range-wrapper">
+                    <div class="range-header">
+                        <span>Max Batch Runs</span>
+                        <span class="range-value" id="ss_maxBatchSummaries_value">0</span>
+                    </div>
+                    <input type="range" id="ss_maxBatchSummaries" name="maxBatchSummaries" class="ss-setting-input" min="0" max="50" step="1">
+                    <span class="help-text">Limits memory/tokens per run by keeping only the most recent N batches (0 for infinite).</span>
+                </div>
+            </div>
+
+            <div class="section">
+                <div class="section-header-row">
+                    <h3 class="section-title">Context Control</h3>
+                </div>
+                <div class="range-wrapper">
+                    <div class="range-header">
+                        <span>Keep Messages Count</span>
+                        <span class="range-value" id="ss_keepMessagesCount_value">5</span>
+                    </div>
+                    <input type="range" id="ss_keepMessagesCount" name="keepMessagesCount" class="ss-setting-input" min="0" max="20" step="1">
+                    <span class="help-text">Number of recent messages prior to the summary marker to retain in the prompt.</span>
+                </div>
+
+                <div class="control-group">
+                    <label class="switch-container">
+                        <div class="switch">
+                            <input type="checkbox" id="ss_limitToUnsummarised" name="limitToUnsummarised" class="ss-setting-input">
+                            <span class="slider"></span>
+                        </div>
+                        <span class="switch-label-text">Only send unsummarised messages</span>
+                    </label>
+                </div>
+
+                <div class="control-group">
+                    <label class="switch-container">
+                        <div class="switch">
+                            <input type="checkbox" id="ss_insertSceneBreak" name="insertSceneBreak" class="ss-setting-input">
+                            <span class="slider"></span>
+                        </div>
+                        <span class="switch-label-text">Insert visual scene break marker</span>
+                    </label>
+                </div>
+
+                <div class="range-wrapper">
+                    <div class="range-header">
+                        <span>Manual Summarisation Prompt Limit (Messages)</span>
+                        <span class="range-value" id="ss_manualSummaryLimit_value">0</span>
+                    </div>
+                    <input type="range" id="ss_manualSummaryLimit" name="manualSummaryLimit" class="ss-setting-input" min="0" max="250" step="10">
+                    <span class="help-text">How many unsummarised messages at most should be sent to the LLM. 0 = Send all of them since the last summary.</span>
+                </div>
+            </div>
+            
+            <div class="section">
+                <div class="section-header-row">
+                    <h3 class="section-title">Injection</h3>
+                </div>
+                <div class="control-group">
+                    <label class="block-label">Injection Template</label>
+                    <input type="text" id="ss_injectTemplate" name="injectTemplate" class="ss-setting-input">
                 </div>
                 
-                <hr>
-                <h4>Memory Extraction</h4>
-                <div class="setting_item">
-                    <label class="checkbox_label">
-                        <input type="checkbox" id="ss_memoryExtractionEnabled" name="memoryExtractionEnabled" class="ss-setting-input">
-                        <span>Enable memory extraction</span>
-                    </label>
-                    <small style="display:block; margin-top:4px; opacity:0.7;">Co-extract atomic facts alongside scene summaries — stored in the Data Bank for Vector Storage retrieval.</small>
-                </div>
-                <div class="setting_item">
-                    <label>Extraction Prompt (Combined)</label>
-                    <textarea id="ss_memoryPrompt" name="memoryPrompt" class="ss-setting-input text_pole" rows="8"
-                        placeholder="Combined prompt for summary and memories..."></textarea>
-                    <small id="ss_memoryPrompt_hint" style="display:block; margin-top:4px; opacity:0.7;">This prompt replaces the Summary Prompt when extraction is enabled. Must include &lt;summary&gt; and &lt;memories&gt; tags.</small>
-                </div>
-                <div class="setting_item">
-                    <label>Max memories in index (0 = unlimited)</label>
-                    <input type="number" id="ss_maxMemories" name="maxMemories" class="ss-setting-input text_pole" min="0" step="1">
-                    <small style="display:block; margin-top:4px; opacity:0.7;">Limits the number of recent memories kept in the chat metadata index.</small>
-                </div>
-
-                <hr>
-                <div class="setting_item">
-                    <label>Word limit: <span id="ss_summaryWords_value"></span></label>
-                    <input type="range" id="ss_summaryWords" name="summaryWords" class="ss-setting-input" min="50"
-                        max="1000" step="10">
-                </div>
-                <div class="setting_item">
-                    <div style="display: flex; align-items: center; gap: 8px;">
-                        <input type="checkbox" id="ss_storeHistory" name="storeHistory" class="ss-setting-input">
-                        <label for="ss_storeHistory"
-                            title="If enabled, all stored summaries will be injected. If disabled, only the latest summary is injected.">Store
-                            History</label>
-                    </div>
-                </div>
-                <div class="setting_item">
-                    <label
-                        title="When generating a new summary, how many previous scene summaries should be included in the {{summary}} placeholder for context. 0 = Include all previous summaries.">
-                        Summary History Depth: <span id="ss_summaryHistoryDepth_value"></span>
-                    </label>
-                    <input type="range" id="ss_summaryHistoryDepth" name="summaryHistoryDepth" class="ss-setting-input"
-                        min="0" max="20" step="1">
-                    <small style="display:block; margin-top:5px; opacity:0.7;">Number of previous snapshots to include
-                        as context for the LLM when generating a new scene summary. 0 = All.</small>
-                </div>
-                <div class="setting_item">
-                    <label>Max Snapshots History</label>
-                    <input type="number" id="ss_maxSummaries" name="maxSummaries" class="ss-setting-input text_pole"
-                        min="0" max="50">
-                    <small style="display:block; margin-top:5px; opacity:0.7;">Number of recent snapshots to inject into
-                        the prompt (0 for all).</small>
-                </div>
-                <div class="setting_item"
-                    style="margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--grey40);">
-                    <label>Batch Size (Messages): <span id="ss_batchSize_value"></span></label>
-                    <input type="range" id="ss_batchSize" name="batchSize" class="ss-setting-input" min="10" max="200"
-                        step="5">
-                    <small>Number of messages to summarize in each batch run.</small>
-
-                    <label style="margin-top: 5px; display:block;">Max Batch Runs: <span
-                            id="ss_maxBatchSummaries_value"></span></label>
-                    <input type="range" id="ss_maxBatchSummaries" name="maxBatchSummaries" class="ss-setting-input"
-                        min="0" max="50" step="1">
-                    <small>Limits memory/tokens per run by keeping only the most recent N batches (0 for
-                        infinite).</small>
-                </div>
-
-                <hr>
-                <h4>Context Control</h4>
-                <div class="setting_item">
-                    <label>Keep Messages Count: <span id="ss_keepMessagesCount_value"></span></label>
-                    <input type="range" id="ss_keepMessagesCount" name="keepMessagesCount"
-                        class="ss-setting-input text_pole" min="0" max="20" step="1">
-                    <small style="display:block; margin-top:5px; opacity:0.7;">Number of recent messages prior to the
-                        summary marker to retain in the prompt.</small>
-                </div>
-                <div class="setting_item">
-                    <div style="display: flex; align-items: center; gap: 8px;">
-                        <input type="checkbox" id="ss_limitToUnsummarised" name="limitToUnsummarised"
-                            class="ss-setting-input">
-                        <label for="ss_limitToUnsummarised"
-                            title="If enabled, only messages sent after the last summary will be included in the prompt">Only
-                            send unsummarised messages</label>
-                    </div>
-                </div>
-                <div class="setting_item">
-                    <div style="display: flex; align-items: center; gap: 8px;">
-                        <input type="checkbox" id="ss_insertSceneBreak" name="insertSceneBreak"
-                            class="ss-setting-input">
-                        <label for="ss_insertSceneBreak"
-                            title="Inserts a visual separator in the chat log when a summary is generated">Insert visual
-                            scene break marker</label>
-                    </div>
-                </div>
-
-                <div class="setting_item">
-                    <label
-                        title="Limit the number of recent messages passed to the LLM during manual 'Summarise Scene' clicks. Helps save tokens or limit context. 0 means unlimited.">
-                        Manual Summarisation Prompt Limit (Messages): <span id="ss_manualSummaryLimit_value"></span>
-                    </label>
-                    <input type="range" id="ss_manualSummaryLimit" name="manualSummaryLimit" class="ss-setting-input"
-                        min="0" max="250" step="10">
-                    <small style="display:block; margin-top:5px; opacity:0.7;">How many unsummarised messages at most
-                        should be sent to the LLM. 0 = Send all of them since the last summary.</small>
-                </div>
-                <hr>
-                <h4>Debug Settings</h4>
-                <div class="setting_item">
-                    <div style="display: flex; align-items: center; gap: 8px;">
-                        <input type="checkbox" id="ss_debugMode" name="debugMode" class="ss-setting-input">
-                        <label for="ss_debugMode">Debug Mode (Log to Console)</label>
-                    </div>
-                </div>
-                <div class="setting_item">
-                    <button id="ss_copyLogs" class="menu_button"
-                        style="width: auto; white-space: nowrap; padding: 5px 10px;">
-                        <i class="fa-solid fa-copy" style="margin-right: 5px;"></i> Copy Debug Logs
-                    </button>
-                    <small style="display:block; margin-top:5px; opacity:0.7;">Copies the internal log buffer to
-                        clipboard.</small>
-                </div>
-                <h4>Injection</h4>
-                <div class="setting_item">
-                    <label>Injection Template</label>
-                    <textarea id="ss_injectTemplate" name="injectTemplate" class="ss-setting-input text_pole" rows="1"
-                        placeholder="[Summary: {{summary}}]"></textarea>
-                </div>
-
-                <div class="setting_item">
+                <div class="control-group">
                     <div class="ss-sub-label">Injection Position</div>
 
-                    <label class="checkbox_label"
-                        title="If enabled, the summary text will be scanned for World Info keys">
+                    <label class="checkbox_label" title="If enabled, the summary text will be scanned for World Info keys" style="margin-bottom: 10px; display: inline-block;">
                         <input id="ss_injectScan" name="injectScan" type="checkbox" class="ss-setting-input">
                         Include in World Info Scanning
                     </label>
@@ -184,31 +191,24 @@
                     <div class="ss-radio-group">
                         <label class="radio_label" title="Do not automatically inject the summary">
                             <input type="radio" name="injectPosition" value="-1" class="ss-setting-input">
-                            None (not injected) <i class="fa-solid fa-circle-info"
-                                title="The summary will only be available via the /summarise-check slash command or macro"></i>
+                            None (not injected) <i class="fa-solid fa-circle-info" title="The summary will only be available via the /summarise-check slash command or macro"></i>
                         </label>
-
                         <label class="radio_label" title="Inject before the main prompt / story string">
                             <input type="radio" name="injectPosition" value="2" class="ss-setting-input">
                             Before Main Prompt / Story String
                         </label>
-
                         <label class="radio_label" title="Inject after the main prompt / story string">
                             <input type="radio" name="injectPosition" value="0" class="ss-setting-input">
                             After Main Prompt / Story String
                         </label>
-
                         <div style="display:flex; align-items:center; flex-wrap:wrap; gap:5px;">
-                            <label class="radio_label" title="Inject into chat history at a specific depth"
-                                style="margin-bottom:0;">
+                            <label class="radio_label" title="Inject into chat history at a specific depth" style="margin-bottom:0;">
                                 <input type="radio" name="injectPosition" value="1" class="ss-setting-input">
                                 In-chat @ Depth
                             </label>
-                            <input id="ss_injectDepth" name="injectDepth" type="number"
-                                class="ss-setting-input text_pole" min="0" style="width: 60px; padding: 2px 5px;">
+                            <input id="ss_injectDepth" name="injectDepth" type="number" class="ss-setting-input" min="0" style="width: 60px; padding: 2px 5px;">
                             <span>as</span>
-                            <select id="ss_injectRole" name="injectRole"
-                                class="ss-setting-input text_pole select_compact" style="width: auto;">
+                            <select id="ss_injectRole" name="injectRole" class="ss-setting-input select_compact" style="width: auto;">
                                 <option value="0">System</option>
                                 <option value="1">User</option>
                                 <option value="2">Assistant</option>
@@ -217,59 +217,78 @@
                     </div>
                 </div>
             </div>
+
+            <div class="section">
+                <div class="section-header-row">
+                    <h3 class="section-title">Debug Settings</h3>
+                </div>
+                <div class="control-group">
+                    <label class="switch-container">
+                        <div class="switch">
+                            <input type="checkbox" id="ss_debugMode" name="debugMode" class="ss-setting-input">
+                            <span class="slider"></span>
+                        </div>
+                        <span class="switch-label-text">Debug Mode (Log to Console)</span>
+                    </label>
+                </div>
+                <div class="control-group">
+                    <button id="ss_copyLogs" class="btn" style="width: auto; white-space: nowrap;">
+                        <i class="fa-solid fa-copy"></i> Copy Debug Logs
+                    </button>
+                    <span class="help-text">Copies the internal log buffer to clipboard.</span>
+                </div>
+            </div>
+
         </div>
 
-        <div id="ss_memory_panel" class="ss-panel" style="display:none;">
-            <div class="settings_section">
-                <h4 style="display:flex; justify-content:space-between; align-items:center;">
-                    Memory Management
-                    <small style="font-weight:normal; opacity:0.7;">Facts extracted for this chat</small>
-                </h4>
-                
-                <div id="ss_memory_tabs" style="display:flex; gap: 5px; flex-wrap: wrap; margin-bottom: 10px;">
+        <div id="memory" class="tab-content ss-panel">
+            <div class="section">
+                <div class="section-header-row">
+                    <h3 class="section-title">Memory Management</h3>
+                    <span class="help-text" style="margin: 0;">Facts extracted for this chat</span>
+                </div>
+
+                <div id="ss_memory_tabs" class="filter-row">
                     <!-- Character tabs generated here -->
                 </div>
 
-                <div id="ss_memories_list" class="ss-memories-container" style="display:flex; flex-direction:column; gap:10px;">
+                <div id="ss_memories_list" class="ss-memories-container">
                     <!-- Memory blocks with textareas and delete buttons -->
                 </div>
-                <div id="ss_memories_empty_state" class="ss-empty"
-                    style="display:none; text-align:center; padding:20px; color:var(--grey70); border: 1px dashed var(--grey40); border-radius: 5px;">
+                
+                <div id="ss_memories_empty_state" class="ss-empty" style="display:none; text-align:center; padding:20px; color:var(--text-muted); border: 1px dashed var(--border-color); border-radius: 5px;">
                     No memories extracted yet.
                 </div>
             </div>
         </div>
 
-        <div id="ss_summary_panel" class="ss-panel" style="display:none;">
-            <div class="settings_section">
-                <h4 style="display:flex; justify-content:space-between; align-items:center;">
-                    Snapshots
+        <div id="snapshots" class="tab-content ss-panel">
+            <div class="section">
+                <div class="section-header-row">
+                    <h3 class="section-title">Snapshots</h3>
                     <div style="display:flex; gap:5px;">
-                        <button id="ss_consolidate_button" class="menu_button interactable"
-                            style="font-size: 0.9em; padding: 4px 8px; display: none;" title="Consolidate selected scenes">
+                        <button id="ss_consolidate_button" class="btn interactable" style="display: none;" title="Consolidate selected scenes">
                             <i class="fa-solid fa-compress"></i> Consolidate
                         </button>
-                        <button id="ss_batch_summarise_button" class="menu_button interactable"
-                            style="font-size: 0.9em; padding: 4px 8px;">
+                        <button id="ss_batch_summarise_button" class="btn interactable">
                             <i class="fa-solid fa-layer-group"></i> Run Batch Summarisation
                         </button>
                     </div>
-                </h4>
+                </div>
 
                 <div id="ss_snapshots_list" class="ss-snapshots-container"></div>
 
-                <div id="ss_empty_state" class="ss-empty"
-                    style="display:none; text-align:center; padding:20px; color:var(--grey70); border: 1px dashed var(--grey40); border-radius: 5px;">
+                <div id="ss_empty_state" class="ss-empty" style="display:none; text-align:center; padding:20px; color:var(--text-muted); border: 1px dashed var(--border-color); border-radius: 5px;">
                     No snapshots found. Generate a summary to begin.
                 </div>
-            </div>
 
-            <div class="settings_section" style="margin-top: 15px;">
-                <h4>Current Injection Preview</h4>
-                <textarea id="ss_currentSummary" class="text_pole" rows="3" readonly
-                    style="width: 100%; resize: vertical; opacity: 0.7; font-size: 0.9em;"></textarea>
-                <small>This is the actual text currently visible to the AI (based on your history settings).</small>
+                <div class="injection-preview" style="margin-top: 15px;">
+                    <div class="injection-preview-title">Current Injection Preview</div>
+                    <textarea id="ss_currentSummary" disabled rows="4" style="opacity: 0.7;"></textarea>
+                    <span class="help-text">This is the actual text currently visible to the AI (based on your history settings).</span>
+                </div>
             </div>
         </div>
+
     </div>
 </div>
