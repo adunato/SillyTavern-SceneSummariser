@@ -16,14 +16,12 @@ export function getChatCollectionId() {
 
 /**
  * Constructs the base request body needed for Vector Storage backend API calls.
- * We piggyback off the user's existing Vector Storage extension settings to know which embedding model to use.
  * @returns {object}
  */
 function getBaseVectorPayload() {
     const vectorSettings = extension_settings?.vectors || {};
     return {
         source: vectorSettings.source || 'extras',
-        // Send the raw settings so the backend can extract the correct model based on 'source'
         ...vectorSettings
     };
 }
@@ -31,7 +29,7 @@ function getBaseVectorPayload() {
 /**
  * Inserts memory items into the dedicated vector collection.
  * @param {string} collectionId
- * @param {{ id: string, text: string }[]} items
+ * @param {{ text: string, metadata: object }[]} items
  */
 export async function insertVectorItems(collectionId, items) {
     if (!items || items.length === 0) return;
@@ -49,38 +47,31 @@ export async function insertVectorItems(collectionId, items) {
             body: JSON.stringify(payload),
         });
 
-        if (!response.ok) {
-            throw new Error(`Server returned ${response.status} ${response.statusText}`);
-        }
-
-        logDebug('log', `[vectorHandler] Inserted ${items.length} items into ${collectionId}`);
+        if (!response.ok) throw new Error(`Server returned ${response.status}`);
+        console.log(`[${extensionName}] [vectorHandler] Inserted ${items.length} items into ${collectionId}`);
     } catch (err) {
-        logDebug('error', `[vectorHandler] Failed to insert vectors: ${err.message}`);
-        console.error(`[${extensionName}] Failed to insert vectors:`, err);
+        console.error(`[${extensionName}] [vectorHandler] Failed to insert vectors:`, err);
     }
 }
 
 /**
  * Queries the dedicated vector collection for relevant memories.
- * @param {string} collectionId
- * @param {string} searchText
- * @param {number} topK
- * @param {number} threshold
- * @returns {Promise<object[]>} Array of metadata objects { text: string, ... }
  */
 export async function queryVectorCollection(collectionId, searchText, topK, threshold) {
-    if (!searchText || topK <= 0) return [];
+    if (!searchText) return [];
+    
+    // 0 = unlimited (we use 1000 as a safe high bound for the backend)
+    const actualTopK = topK > 0 ? topK : 1000;
+
+    console.log(`[${extensionName}] [vectorHandler] Querying ${collectionId} | topK: ${topK} (effective: ${actualTopK}) | threshold: ${threshold}`);
+    console.log(`[${extensionName}] [vectorHandler] Query text: "${searchText.substring(0, 100)}..."`);
 
     try {
-        logDebug('log', `[vectorHandler] Querying collection: ${collectionId}`);
-        logDebug('log', `[vectorHandler] Query Text (first 50 chars): "${searchText.substring(0, 50).replace(/\n/g, ' ')}..."`);
-        logDebug('log', `[vectorHandler] Parameters: topK=${topK}, threshold=${threshold}`);
-
         const payload = {
             ...getBaseVectorPayload(),
             collectionId,
             searchText,
-            topK,
+            topK: actualTopK,
             threshold
         };
 
@@ -91,52 +82,42 @@ export async function queryVectorCollection(collectionId, searchText, topK, thre
         });
 
         if (!response.ok) {
-            // Silently ignore 404s or empty index errors
             if (response.status === 404) {
-                logDebug('log', '[vectorHandler] Collection not found (404). Index might be empty.');
+                console.log(`[${extensionName}] [vectorHandler] Collection not found (404).`);
                 return [];
             }
-            throw new Error(`Server returned ${response.status} ${response.statusText}`);
+            throw new Error(`Server error: ${response.status}`);
         }
 
         const data = await response.json();
         const results = data.metadata || [];
-        logDebug('log', `[vectorHandler] Query successful. Found ${results.length} relevant memories.`);
-        if (results.length > 0) {
+        
+        console.log(`[${extensionName}] [vectorHandler] Query returned ${results.length} results.`);
+        if (results.length > 0 && data.scores) {
             results.forEach((r, i) => {
-                logDebug('log', `[vectorHandler]   Result #${i + 1}: (Score: ${data.scores ? data.scores[i] : 'N/A'}) "${r.text.substring(0, 100)}..."`);
+                console.log(`[${extensionName}] [vectorHandler]   #${i+1} [Score: ${data.scores[i].toFixed(3)}] ${r.text.substring(0, 60)}...`);
             });
         }
         return results;
     } catch (err) {
-        logDebug('error', `[vectorHandler] Failed to query vectors: ${err.message}`);
+        console.error(`[${extensionName}] [vectorHandler] Query failed:`, err);
         return [];
     }
 }
 
 /**
  * Purges the entire vector collection for this chat.
- * @param {string} collectionId
  */
 export async function purgeVectorCollection(collectionId) {
     try {
-        const payload = {
-            ...getBaseVectorPayload(),
-            collectionId
-        };
-
         const response = await fetch('/api/vector/purge', {
             method: 'POST',
             headers: getRequestHeaders(),
-            body: JSON.stringify(payload),
+            body: JSON.stringify({ ...getBaseVectorPayload(), collectionId }),
         });
-
-        if (!response.ok) {
-            throw new Error(`Server returned ${response.status} ${response.statusText}`);
-        }
-
-        logDebug('log', `[vectorHandler] Purged collection ${collectionId}`);
+        if (!response.ok) throw new Error(`Server error: ${response.status}`);
+        console.log(`[${extensionName}] [vectorHandler] Purged ${collectionId}`);
     } catch (err) {
-        logDebug('error', `[vectorHandler] Failed to purge vectors: ${err.message}`);
+        console.error(`[${extensionName}] [vectorHandler] Purge failed:`, err);
     }
 }
