@@ -98,12 +98,16 @@ export function bindSettingsUI(container) {
         if (name === 'summariesToInject') {
             const display = container.querySelector('#ss_summariesToInject_value');
             if (display) display.textContent = newValue;
+            const currentSummary = container.querySelector('#ss_currentSummary');
+            if (currentSummary) currentSummary.value = buildSummaryText(getChatState(), extension_settings[settingsKey]);
             applyInjection();
         }
 
         if (name === 'fullSummariesToInject') {
             const display = container.querySelector('#ss_fullSummariesToInject_value');
             if (display) display.textContent = newValue;
+            const currentSummary = container.querySelector('#ss_currentSummary');
+            if (currentSummary) currentSummary.value = buildSummaryText(getChatState(), extension_settings[settingsKey]);
             applyInjection();
         }
 

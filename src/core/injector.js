@@ -67,7 +67,7 @@ export function applyInjection() {
 
     const template = settings.injectTemplate || defaultSettings.injectTemplate;
     const value = template
-        .replace('{{summary}}', buildSummaryText(chatState, settings));
+        .replace(/\{\{summary\}\}/ig, buildSummaryText(chatState, settings));
 
     const depth = Number(settings.injectDepth ?? 2);
     const scan = !!settings.injectScan;

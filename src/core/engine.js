@@ -98,13 +98,8 @@ export function getLatestSnapshot(chatState) {
 
 export function buildSummaryText(chatState, settings) {
     if (!chatState?.snapshots?.length) return '';
-    const count = settings?.summariesToInject !== undefined ? settings.summariesToInject : defaultSettings.summariesToInject;
-    const fullCount = settings?.fullSummariesToInject !== undefined ? settings.fullSummariesToInject : defaultSettings.fullSummariesToInject;
-    
-    if (count === 1) {
-        const latest = getLatestSnapshot(chatState);
-        return latest ? `${latest.title}: ${latest.text}` : '';
-    }
+    const count = Number(settings?.summariesToInject !== undefined ? settings.summariesToInject : defaultSettings.summariesToInject);
+    const fullCount = Number(settings?.fullSummariesToInject !== undefined ? settings.fullSummariesToInject : defaultSettings.fullSummariesToInject);
 
     let lastSnapshots = chatState.snapshots;
     if (count > 0) {
@@ -112,8 +107,8 @@ export function buildSummaryText(chatState, settings) {
     }
 
     return lastSnapshots.map((s, index) => {
-        // If fullCount is 0, all are full.
-        // Otherwise, only the last 'fullCount' snapshots are full.
+        // If fullCount is 0, all injected snapshots are full text.
+        // Otherwise, only the last 'fullCount' snapshots in the injected list are full text.
         const isFull = fullCount === 0 || (lastSnapshots.length - index <= fullCount);
         
         if (isFull) {
