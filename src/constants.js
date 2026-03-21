@@ -89,6 +89,12 @@ POSITIVE MEMORY EXAMPLE (Summarize the outcome):
 * Flux: Flux's first meal of premium salmon pâté triggered his first purr in the new home.
 </memory>`,
     maxMemories: 0, // 0 = unlimited
+    // Semantic Injection settings
+    fullMemoriesToInject: 2,
+    semanticRetrievalEnabled: false,
+    semanticSearchDepth: 5,
+    semanticTopK: 5,
+    semanticThreshold: 0.5,
 };
 
 export const chatStateDefaults = {
