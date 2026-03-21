@@ -40,6 +40,9 @@
                         <button id="ss_reset_summaryPrompt" class="icon-btn" title="Reset to default prompt" style="padding: 0;"><i class="fa-solid fa-arrow-rotate-left"></i></button>
                     </label>
                     <textarea id="ss_summaryPrompt" name="summaryPrompt" class="ss-setting-input" rows="2" placeholder="Prompt used to generate summaries..."></textarea>
+                    <div class="variable-legend">
+                        Available: <code>{{words}}</code>, <code>{{summary}}</code>, <code>{{last_messages}}</code>, <code>{{charNames}}</code>, <code>{{existingMemories}}</code>
+                    </div>
                     <span id="ss_summaryPrompt_hint" class="help-text">Prompt used to generate summaries.</span>
                 </div>
                 <div class="control-group">
@@ -48,6 +51,9 @@
                         <button id="ss_reset_consolidationPrompt" class="icon-btn" title="Reset to default prompt" style="padding: 0;"><i class="fa-solid fa-arrow-rotate-left"></i></button>
                     </label>
                     <textarea id="ss_consolidationPrompt" name="consolidationPrompt" class="ss-setting-input" rows="3" placeholder="Prompt used to merge multiple summaries..."></textarea>
+                    <div class="variable-legend">
+                        Available: <code>{{words}}</code>
+                    </div>
                 </div>
             </div>
 
@@ -69,7 +75,10 @@
                         <span>Extraction Prompt (Combined)</span>
                         <button id="ss_reset_memoryPrompt" class="icon-btn" title="Reset to default prompt" style="padding: 0;"><i class="fa-solid fa-arrow-rotate-left"></i></button>
                     </label>
-                    <textarea id="ss_memoryPrompt" name="memoryPrompt" class="ss-setting-input" rows="4"></textarea>
+                    <textarea id="ss_memoryPrompt" name="ss_memoryPrompt" class="ss-setting-input" rows="4"></textarea>
+                    <div class="variable-legend">
+                        Available: <code>{{words}}</code>, <code>{{summary}}</code>, <code>{{last_messages}}</code>, <code>{{charNames}}</code>, <code>{{existingMemories}}</code>
+                    </div>
                     <span id="ss_memoryPrompt_hint" class="help-text">This prompt replaces the Summary Prompt when extraction is enabled. Must include &lt;summary&gt; and &lt;memory&gt; tags.</span>
                 </div>
                 <div class="control-group">
@@ -186,6 +195,9 @@
                 <div class="control-group">
                     <label class="block-label">Injection Template</label>
                     <input type="text" id="ss_injectTemplate" name="injectTemplate" class="ss-setting-input">
+                    <div class="variable-legend">
+                        Available: <code>{{summary}}</code>, <code>{{last_messages}}</code>, <code>{{words}}</code>
+                    </div>
                 </div>
                 
                 <div class="control-group">

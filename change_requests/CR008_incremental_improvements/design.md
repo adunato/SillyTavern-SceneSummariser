@@ -12,8 +12,18 @@ This change request covers a series of incremental improvements and bug fixes fo
      - "Summary Prompt" text box is **DISABLED**.
      - "Extraction Prompt (Combined)" text box is **ENABLED**.
 
+2. **Variable Legend in Prompt Configuration Boxes**
+   - Add a legend of available variables to each prompt configuration box:
+     - **Summary Prompt**: `{{words}}`, `{{summary}}`, `{{last_messages}}`, `{{charNames}}`, `{{existingMemories}}`.
+     - **Consolidation Prompt**: `{{words}}`.
+     - **Extraction Prompt**: `{{words}}`, `{{summary}}`, `{{last_messages}}`, `{{charNames}}`, `{{existingMemories}}`.
+     - **Injection Template**: `{{summary}}`, `{{last_messages}}`, `{{words}}`.
+   - Use a styled `.variable-legend` class in `style.css` for consistent appearance.
+
 ## Affected Files
 - `src/ui/settingsUI.js`: UI logic for enabling/disabling inputs.
+- `settings.html`: UI structure for variable legends.
+- `style.css`: Styling for the legends.
 
 ## Design Decisions
 - Add a new helper function `updatePromptVisibility(container, settings)` to handle the logic.
