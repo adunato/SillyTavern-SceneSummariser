@@ -2,7 +2,7 @@ import { extension_settings, getContext } from '../../../../../extensions.js';
 import { reloadCurrentChat } from '../../../../../../script.js';
 import { settingsKey, defaultSettings, extensionName } from '../constants.js';
 import { logDebug } from '../utils/logger.js';
-import { getSSMemoryFileName, persistMemoriesForChat } from '../storage/memoryFileHandler.js';
+import { persistMemoriesForChat } from '../storage/memoryFileHandler.js';
 import { getActiveChatId } from '../state/stateManager.js';
 import { buildExtractionPrompt, parseExtractionResponse } from '../core/engine.js';
 import { callSummarisationLLM } from '../core/llmApi.js';
@@ -198,7 +198,7 @@ export async function regenerateSnapshot(snapshot, settings, chatState) {
     const snapshotIndex = chatState.snapshots.findIndex(s => s.id === snapshot.id);
     let previousSnapshots = snapshotIndex > -1 ? chatState.snapshots.slice(0, snapshotIndex) : [];
 
-    const historyDepth = Number(settings.summaryHistoryDepth || defaultSettings.summaryHistoryDepth);
+    const historyDepth = Number(settings.summaryContextDepth || defaultSettings.summaryContextDepth);
     if (historyDepth > 0 && previousSnapshots.length > historyDepth) {
         previousSnapshots = previousSnapshots.slice(-historyDepth);
     }
