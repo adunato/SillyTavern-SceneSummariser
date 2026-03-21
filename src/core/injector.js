@@ -15,6 +15,7 @@ export async function handleSemanticRetrieval() {
     ensureSettings();
     const settings = extension_settings[settingsKey];
     if (!settings?.semanticRetrievalEnabled || !settings.enabled) {
+        logDebug('log', '[handleSemanticRetrieval] Semantic retrieval disabled or extension disabled. Clearing recalled memories.');
         setExtensionPrompt('ss_vector_memories', '', extension_prompt_types.IN_PROMPT, 0, false, extension_prompt_roles.SYSTEM);
         return;
     }
@@ -27,7 +28,12 @@ export async function handleSemanticRetrieval() {
     const queryDepth = Number(settings.semanticSearchDepth || 5);
     const recentMessages = chat.slice(-queryDepth).filter(m => !m.is_system).map(m => m.mes).join('\n');
     
-    if (!recentMessages.trim()) return;
+    logDebug('log', `[handleSemanticRetrieval] Triggered. Query Depth: ${queryDepth} messages.`);
+
+    if (!recentMessages.trim()) {
+        logDebug('log', '[handleSemanticRetrieval] No recent messages found to form a query.');
+        return;
+    }
 
     const topK = Number(settings.semanticTopK || 5);
     const threshold = Number(settings.semanticThreshold || 0.5);
@@ -37,14 +43,12 @@ export async function handleSemanticRetrieval() {
         const results = await queryVectorCollection(collectionId, recentMessages, topK, threshold);
         
         if (!results || results.length === 0) {
+            logDebug('log', '[handleSemanticRetrieval] No relevant memories found in vector DB.');
             setExtensionPrompt('ss_vector_memories', '', extension_prompt_types.IN_PROMPT, 0, false, extension_prompt_roles.SYSTEM);
             return;
         }
 
-        // Deduplicate against memories that will ALREADY be injected via the scene blocks.
-        // buildSummaryText handles adding full memories for recent scenes, and semantic memories for older ones.
-        // Here, we just need to pass the query results to the chatState temporarily, so buildSummaryText can use them,
-        // AND we gather any "leftover" very old memories to inject as a standalone block.
+        logDebug('log', `[handleSemanticRetrieval] Semantic Search returned ${results.length} results. Passing to buildSummaryText.`);
 
         // Actually, the easiest way to share state with the synchronous buildSummaryText is to attach it to chatState transiently.
         chatState.currentSemanticResults = results.map(r => r.text);

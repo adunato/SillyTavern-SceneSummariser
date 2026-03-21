@@ -72,6 +72,10 @@ export async function queryVectorCollection(collectionId, searchText, topK, thre
     if (!searchText || topK <= 0) return [];
 
     try {
+        logDebug('log', `[vectorHandler] Querying collection: ${collectionId}`);
+        logDebug('log', `[vectorHandler] Query Text (first 50 chars): "${searchText.substring(0, 50).replace(/\n/g, ' ')}..."`);
+        logDebug('log', `[vectorHandler] Parameters: topK=${topK}, threshold=${threshold}`);
+
         const payload = {
             ...getBaseVectorPayload(),
             collectionId,
@@ -88,13 +92,22 @@ export async function queryVectorCollection(collectionId, searchText, topK, thre
 
         if (!response.ok) {
             // Silently ignore 404s or empty index errors
-            if (response.status === 404) return [];
+            if (response.status === 404) {
+                logDebug('log', '[vectorHandler] Collection not found (404). Index might be empty.');
+                return [];
+            }
             throw new Error(`Server returned ${response.status} ${response.statusText}`);
         }
 
         const data = await response.json();
-        // data.metadata contains the stored items
-        return data.metadata || [];
+        const results = data.metadata || [];
+        logDebug('log', `[vectorHandler] Query successful. Found ${results.length} relevant memories.`);
+        if (results.length > 0) {
+            results.forEach((r, i) => {
+                logDebug('log', `[vectorHandler]   Result #${i + 1}: (Score: ${data.scores ? data.scores[i] : 'N/A'}) "${r.text.substring(0, 100)}..."`);
+            });
+        }
+        return results;
     } catch (err) {
         logDebug('error', `[vectorHandler] Failed to query vectors: ${err.message}`);
         return [];
