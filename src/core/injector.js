@@ -1,10 +1,61 @@
 import { extension_settings, getContext } from '../../../../../extensions.js';
-import { setExtensionPrompt, extension_prompt_types, extension_prompt_roles } from '../../../../../../script.js';
+import { setExtensionPrompt, getExtensionPrompt, extension_prompts, extension_prompt_types, extension_prompt_roles } from '../../../../../../script.js';
 import { eventSource, event_types } from '../../../../../../scripts/events.js';
 import { settingsKey, extensionName, defaultSettings } from '../constants.js';
 import { logDebug } from '../utils/logger.js';
 import { getChatState, ensureSettings } from '../state/stateManager.js';
 import { buildSummaryText } from './engine.js';
+import { queryVectorCollection, getChatCollectionId } from '../storage/vectorHandler.js';
+
+export function scrubVectorStoragePrompt() {
+    // Legacy Data Bank cleanup function, replaced by full semantic retrieval
+}
+
+export async function handleSemanticRetrieval() {
+    ensureSettings();
+    const settings = extension_settings[settingsKey];
+    if (!settings?.semanticRetrievalEnabled || !settings.enabled) {
+        setExtensionPrompt('ss_vector_memories', '', extension_prompt_types.IN_PROMPT, 0, false, extension_prompt_roles.SYSTEM);
+        return;
+    }
+
+    const chatState = getChatState();
+    const ctx = getContext();
+    const chat = ctx?.chat || [];
+    
+    // Build query from recent messages
+    const queryDepth = Number(settings.semanticSearchDepth || 5);
+    const recentMessages = chat.slice(-queryDepth).filter(m => !m.is_system).map(m => m.mes).join('\n');
+    
+    if (!recentMessages.trim()) return;
+
+    const topK = Number(settings.semanticTopK || 5);
+    const threshold = Number(settings.semanticThreshold || 0.5);
+    const collectionId = getChatCollectionId();
+
+    try {
+        const results = await queryVectorCollection(collectionId, recentMessages, topK, threshold);
+        
+        if (!results || results.length === 0) {
+            setExtensionPrompt('ss_vector_memories', '', extension_prompt_types.IN_PROMPT, 0, false, extension_prompt_roles.SYSTEM);
+            return;
+        }
+
+        // Deduplicate against memories that will ALREADY be injected via the scene blocks.
+        // buildSummaryText handles adding full memories for recent scenes, and semantic memories for older ones.
+        // Here, we just need to pass the query results to the chatState temporarily, so buildSummaryText can use them,
+        // AND we gather any "leftover" very old memories to inject as a standalone block.
+
+        // Actually, the easiest way to share state with the synchronous buildSummaryText is to attach it to chatState transiently.
+        chatState.currentSemanticResults = results.map(r => r.text);
+        
+        // Re-run applyInjection so buildSummaryText can consume these results
+        applyInjection();
+
+    } catch (err) {
+        console.error(`[${extensionName}] Semantic Retrieval Failed:`, err);
+    }
+}
 
 export function updateInjectionVisibility(container) {
     if (!container) return;

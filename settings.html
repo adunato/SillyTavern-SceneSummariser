@@ -88,6 +88,17 @@
                     <input type="number" id="ss_maxMemories" name="maxMemories" class="ss-setting-input" min="0" step="1">
                     <span class="help-text">Limits the number of recent memories kept in the chat metadata index.</span>
                 </div>
+
+                <div class="control-group" style="margin-top: 10px;">
+                    <label class="switch-container">
+                        <div class="switch">
+                            <input type="checkbox" id="ss_suppressVectorInjection" name="suppressVectorInjection" class="ss-setting-input">
+                            <span class="slider"></span>
+                        </div>
+                        <span class="switch-label-text">Suppress Vector Storage Auto-Injection</span>
+                    </label>
+                    <span class="help-text" style="display: block; margin-top: 5px;">If enabled, memories are saved to Data Bank for manual semantic search (<code>/db-search</code>), but are stripped from Vector Storage's automatic prompt injection to prevent duplicates.</span>
+                </div>
             </div>
 
             <!-- SECTION 3: SUMMARISATION CONTROL -->
@@ -164,7 +175,7 @@
             <!-- SECTION 4: CHAT INJECTION CONTROL -->
             <div class="section">
                 <div class="section-header-row">
-                    <h3 class="section-title">Chat Injection Control</h3>
+                    <h3 class="section-title">Summary Injection Control</h3>
                 </div>
                 
                 <div class="control-group">
@@ -184,15 +195,6 @@
                     </div>
                     <input type="range" id="ss_summariesToInject" name="summariesToInject" class="ss-setting-input" min="0" max="50" step="1">
                     <span class="help-text">Number of recent snapshots to inject into the active chat prompt (1 = latest only, 0 = all).</span>
-                </div>
-
-                <div class="range-wrapper">
-                    <div class="range-header">
-                        <span>Retain full summaries</span>
-                        <span class="range-value" id="ss_fullSummariesToInject_value">0</span>
-                    </div>
-                    <input type="range" id="ss_fullSummariesToInject" name="fullSummariesToInject" class="ss-setting-input" min="0" max="50" step="1">
-                    <span class="help-text">Number of recent snapshots to inject as full text. Older injected snapshots will only show their title and description. 0 = all full.</span>
                 </div>
 
                 <div class="range-wrapper">
@@ -250,7 +252,64 @@
                 </div>
             </div>
 
-            <!-- SECTION 5: DEBUG SETTINGS -->
+            <!-- SECTION 5: MEMORY INJECTION CONTROL -->
+            <div class="section">
+                <div class="section-header-row">
+                    <h3 class="section-title">Memory Injection Control</h3>
+                    <div style="display:flex; gap:5px;">
+                        <button id="ss_purge_vector_button" class="btn interactable" title="Purge vector index for this chat">
+                            <i class="fa-solid fa-trash-can"></i> Purge Vector Index
+                        </button>
+                    </div>
+                </div>
+
+                <div class="range-wrapper">
+                    <div class="range-header">
+                        <span>Scenes with Full Memories</span>
+                        <span class="range-value" id="ss_fullMemoriesToInject_value">2</span>
+                    </div>
+                    <input type="range" id="ss_fullMemoriesToInject" name="fullMemoriesToInject" class="ss-setting-input" min="0" max="50" step="1">
+                    <span class="help-text">Number of recent injected scenes to show ALL their facts. Older scenes will only show facts retrieved via Semantic Search. 0 = all scenes show all facts.</span>
+                </div>
+
+                <div class="control-group">
+                    <label class="switch-container">
+                        <div class="switch">
+                            <input type="checkbox" id="ss_semanticRetrievalEnabled" name="semanticRetrievalEnabled" class="ss-setting-input">
+                            <span class="slider"></span>
+                        </div>
+                        <span class="switch-label-text">Enable Semantic Search</span>
+                    </label>
+                    <span class="help-text" style="display: block; margin-top: 5px;">Automatically query the vector database to retrieve relevant older memories.</span>
+                </div>
+
+                <div class="range-wrapper">
+                    <div class="range-header">
+                        <span>Search Query Scope (Messages)</span>
+                        <span class="range-value" id="ss_semanticSearchDepth_value">5</span>
+                    </div>
+                    <input type="range" id="ss_semanticSearchDepth" name="semanticSearchDepth" class="ss-setting-input" min="1" max="20" step="1">
+                    <span class="help-text">Number of recent chat messages to use as the semantic search query.</span>
+                </div>
+
+                <div class="range-wrapper">
+                    <div class="range-header">
+                        <span>Max Retrieved Memories (Top K)</span>
+                        <span class="range-value" id="ss_semanticTopK_value">5</span>
+                    </div>
+                    <input type="range" id="ss_semanticTopK" name="semanticTopK" class="ss-setting-input" min="1" max="20" step="1">
+                </div>
+
+                <div class="range-wrapper">
+                    <div class="range-header">
+                        <span>Similarity Threshold</span>
+                        <span class="range-value" id="ss_semanticThreshold_value">0.5</span>
+                    </div>
+                    <input type="range" id="ss_semanticThreshold" name="semanticThreshold" class="ss-setting-input" min="0" max="1" step="0.05">
+                </div>
+            </div>
+
+            <!-- SECTION 6: DEBUG SETTINGS -->
             <div class="section">
                 <div class="section-header-row">
                     <h3 class="section-title">Debug Settings</h3>

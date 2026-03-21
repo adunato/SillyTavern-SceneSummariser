@@ -97,16 +97,21 @@ export function getLatestSnapshot(chatState) {
 }
 
 export function buildSummaryText(chatState, settings) {
-    if (!chatState?.snapshots?.length) return '';
+    if (!chatState?.snapshots?.length && !chatState?.currentSemanticResults?.length) return '';
     const count = Number(settings?.summariesToInject !== undefined ? settings.summariesToInject : defaultSettings.summariesToInject);
-    const fullCount = Number(settings?.fullSummariesToInject !== undefined ? settings.fullSummariesToInject : defaultSettings.fullSummariesToInject);
+    const fullCount = Number(settings?.fullMemoriesToInject !== undefined ? settings.fullMemoriesToInject : 2); // default to 2
+    const memoryEnabled = settings?.memoryExtractionEnabled ?? defaultSettings.memoryExtractionEnabled;
+    const semanticEnabled = settings?.semanticRetrievalEnabled ?? false;
 
-    let lastSnapshots = chatState.snapshots;
+    let lastSnapshots = chatState.snapshots || [];
     if (count > 0) {
-        lastSnapshots = chatState.snapshots.slice(-count);
+        lastSnapshots = lastSnapshots.slice(-count);
     }
 
-    return lastSnapshots.map((s, index) => {
+    const injectedBlocks = [];
+    const injectedFacts = new Set(); // To prevent duplicates in <recalled_memories>
+
+    lastSnapshots.forEach((s, index) => {
         // If fullCount is 0, all injected snapshots are full text.
         // Otherwise, only the last 'fullCount' snapshots in the injected list are full text.
         const isFull = fullCount === 0 || (lastSnapshots.length - index <= fullCount);
@@ -118,12 +123,58 @@ export function buildSummaryText(chatState, settings) {
             blockText = `${s.title}: ${s.description || 'No description available.'}`;
         }
 
-        const memoryEnabled = settings?.memoryExtractionEnabled ?? defaultSettings.memoryExtractionEnabled;
         if (memoryEnabled && s.memories && s.memories.length > 0) {
-            const memoriesList = s.memories.map(m => `- ${m}`).join('\n');
-            blockText += `\nMemories:\n${memoriesList}`;
+            if (isFull || !semanticEnabled) {
+                // If it's a recent scene OR semantic search is disabled, show all facts.
+                const memoriesList = s.memories.map(m => `- ${m}`).join('\n');
+                blockText += `\nMemories:\n${memoriesList}`;
+                s.memories.forEach(m => injectedFacts.add(m)); // Track injected facts
+            } else {
+                // It's an older scene AND semantic search is enabled.
+                // Only inject facts that the semantic search returned for THIS scene.
+                const relevantFacts = [];
+                if (chatState.currentSemanticResults) {
+                    chatState.currentSemanticResults.forEach(resText => {
+                        // Assuming vector text is formatted as `${snapshot.title}:\n- ${memText}`
+                        if (resText.startsWith(`${s.title}:\n- `)) {
+                            const fact = resText.substring(s.title.length + 3).trim();
+                            relevantFacts.push(fact);
+                            injectedFacts.add(fact);
+                        }
+                    });
+                }
+                
+                if (relevantFacts.length > 0) {
+                    const memoriesList = relevantFacts.map(m => `- ${m}`).join('\n');
+                    blockText += `\nRelevant Memories:\n${memoriesList}`;
+                }
+            }
         }
 
-        return blockText;
-    }).join('\n\n');
+        injectedBlocks.push(blockText);
+    });
+
+    // Handle very old semantic memories (ones that weren't caught by the recent scene loop)
+    if (semanticEnabled && memoryEnabled && chatState.currentSemanticResults) {
+        const standaloneFacts = [];
+        chatState.currentSemanticResults.forEach(resText => {
+            // Parse out the title and fact
+            const match = resText.match(/^(.*?):\n- (.*)$/);
+            if (match) {
+                const title = match[1];
+                const fact = match[2];
+                if (!injectedFacts.has(fact)) {
+                    standaloneFacts.push(`[${title}] ${fact}`);
+                }
+            }
+        });
+
+        if (standaloneFacts.length > 0) {
+            const standaloneBlock = `<recalled_memories>\n${standaloneFacts.join('\n')}\n</recalled_memories>`;
+            // Inject the recalled memories block at the top
+            injectedBlocks.unshift(standaloneBlock);
+        }
+    }
+
+    return injectedBlocks.join('\n\n');
 }

@@ -3,7 +3,7 @@ import { logDebug } from './src/utils/logger.js';
 import { ensureSettings } from './src/state/stateManager.js';
 import { mountSettings, updateSettingsUI } from './src/ui/settingsUI.js';
 import { startButtonMount } from './src/ui/buttons.js';
-import { applyInjection, filterContextInterceptor } from './src/core/injector.js';
+import { applyInjection, filterContextInterceptor, handleSemanticRetrieval } from './src/core/injector.js';
 import { eventSource, event_types } from '../../../../scripts/events.js';
 
 function onChatChanged() {
@@ -18,6 +18,7 @@ jQuery(async () => {
     startButtonMount();
     try {
         eventSource?.on(event_types.CHAT_CHANGED, onChatChanged);
+        eventSource?.on(event_types.GENERATE_BEFORE_COMBINE_PROMPTS, handleSemanticRetrieval);
         logDebug('log', 'Registered prompt filter listeners (migrated to generate_interceptor)');
     } catch (err) {
         console.error(`[${extensionName}] Failed to register event listeners:`, err);

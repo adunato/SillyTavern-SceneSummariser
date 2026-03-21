@@ -11,6 +11,8 @@ import { ConnectionManagerRequestService } from '../../../../shared.js';
 import { handleSnapshotAction, renderSnapshotsList, handleSnapshotSelectionChange } from './snapshotUI.js';
 import { onSummariseClick, onConsolidateClick, onBatchSummariseClick } from './buttons.js';
 
+import { purgeVectorCollection, getChatCollectionId } from '../storage/vectorHandler.js';
+
 export function togglePanel(container, selector) {
     const panel = container.querySelector(selector);
     if (!panel) return;
@@ -136,7 +138,30 @@ export function bindSettingsUI(container) {
             if (display) display.textContent = newValue;
         }
 
-        if (['injectEnabled', 'injectPosition', 'injectDepth', 'injectScan', 'injectRole', 'injectTemplate'].includes(name)) {
+        if (name === 'fullMemoriesToInject') {
+            const display = container.querySelector('#ss_fullMemoriesToInject_value');
+            if (display) display.textContent = newValue;
+            const currentSummary = container.querySelector('#ss_currentSummary');
+            if (currentSummary) currentSummary.value = buildSummaryText(getChatState(), extension_settings[settingsKey]);
+            applyInjection();
+        }
+
+        if (name === 'semanticSearchDepth') {
+            const display = container.querySelector('#ss_semanticSearchDepth_value');
+            if (display) display.textContent = newValue;
+        }
+
+        if (name === 'semanticTopK') {
+            const display = container.querySelector('#ss_semanticTopK_value');
+            if (display) display.textContent = newValue;
+        }
+
+        if (name === 'semanticThreshold') {
+            const display = container.querySelector('#ss_semanticThreshold_value');
+            if (display) display.textContent = newValue;
+        }
+
+        if (['injectEnabled', 'injectPosition', 'injectDepth', 'injectScan', 'injectRole', 'injectTemplate', 'semanticRetrievalEnabled'].includes(name)) {
             applyInjection();
         }
     });
@@ -350,6 +375,16 @@ export function bindSettingsUI(container) {
         consolidateButton.addEventListener('click', onConsolidateClick);
     }
 
+    const purgeVectorButton = container.querySelector('#ss_purge_vector_button');
+    if (purgeVectorButton) {
+        purgeVectorButton.addEventListener('click', async () => {
+            if (confirm('Are you sure you want to purge the vector index for this chat? This cannot be undone.')) {
+                await purgeVectorCollection(getChatCollectionId());
+                toastr.success('Vector index purged');
+            }
+        });
+    }
+
     // Snapshot selection for consolidation
     container.addEventListener('change', (event) => {
         if (event.target.classList.contains('ss-snapshot-select')) {
@@ -433,6 +468,11 @@ export function updateSettingsUI(container) {
     setValue('#ss_memoryExtractionEnabled', settings.memoryExtractionEnabled ?? defaultSettings.memoryExtractionEnabled);
     setValue('#ss_memoryPrompt', settings.memoryPrompt ?? defaultSettings.memoryPrompt);
     setValue('#ss_maxMemories', settings.maxMemories ?? defaultSettings.maxMemories);
+    setValue('#ss_fullMemoriesToInject', settings.fullMemoriesToInject ?? defaultSettings.fullMemoriesToInject);
+    setValue('#ss_semanticRetrievalEnabled', settings.semanticRetrievalEnabled ?? defaultSettings.semanticRetrievalEnabled);
+    setValue('#ss_semanticSearchDepth', settings.semanticSearchDepth ?? defaultSettings.semanticSearchDepth);
+    setValue('#ss_semanticTopK', settings.semanticTopK ?? defaultSettings.semanticTopK);
+    setValue('#ss_semanticThreshold', settings.semanticThreshold ?? defaultSettings.semanticThreshold);
 
     // Radio for position
     const radios = container.querySelectorAll('input[name="injectPosition"]');
@@ -450,6 +490,18 @@ export function updateSettingsUI(container) {
 
     const summaryContextDepthDisplay = container.querySelector('#ss_summaryContextDepth_value');
     if (summaryContextDepthDisplay) summaryContextDepthDisplay.textContent = settings.summaryContextDepth ?? defaultSettings.summaryContextDepth;
+
+    const fullMemoriesToInjectDisplay = container.querySelector('#ss_fullMemoriesToInject_value');
+    if (fullMemoriesToInjectDisplay) fullMemoriesToInjectDisplay.textContent = settings.fullMemoriesToInject ?? defaultSettings.fullMemoriesToInject;
+
+    const semanticSearchDepthDisplay = container.querySelector('#ss_semanticSearchDepth_value');
+    if (semanticSearchDepthDisplay) semanticSearchDepthDisplay.textContent = settings.semanticSearchDepth ?? defaultSettings.semanticSearchDepth;
+
+    const semanticTopKDisplay = container.querySelector('#ss_semanticTopK_value');
+    if (semanticTopKDisplay) semanticTopKDisplay.textContent = settings.semanticTopK ?? defaultSettings.semanticTopK;
+
+    const semanticThresholdDisplay = container.querySelector('#ss_semanticThreshold_value');
+    if (semanticThresholdDisplay) semanticThresholdDisplay.textContent = settings.semanticThreshold ?? defaultSettings.semanticThreshold;
 
     const batchSizeDisplay = container.querySelector('#ss_batchSize_value');
     if (batchSizeDisplay) batchSizeDisplay.textContent = settings.batchSize ?? defaultSettings.batchSize;
