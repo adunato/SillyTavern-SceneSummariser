@@ -8,6 +8,7 @@ export const defaultSettings = {
     consolidationPrompt: 'Create a single, cohesive summary by merging the following scene summaries. Remove redundant information and ensure the narrative flows logically. Limit the final summary to {{words}} words or less. Your response must include exactly three components:\n\n1. A single <title> block containing a brief title for the consolidated scene.\n2. A single <description> block containing a short description of the consolidated scene.\n3. A single <summary> block containing the merged plot summary.',
     summaryWords: 200,
     summariesToInject: 5, // Replaces storeHistory (bool) and maxSummaries (int)
+    fullSummariesToInject: 0, // 0 = all
     debugMode: false,
     injectEnabled: true,
     injectPosition: 0, // In Prompt

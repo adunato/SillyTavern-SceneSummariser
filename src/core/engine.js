@@ -99,6 +99,7 @@ export function getLatestSnapshot(chatState) {
 export function buildSummaryText(chatState, settings) {
     if (!chatState?.snapshots?.length) return '';
     const count = settings?.summariesToInject !== undefined ? settings.summariesToInject : defaultSettings.summariesToInject;
+    const fullCount = settings?.fullSummariesToInject !== undefined ? settings.fullSummariesToInject : defaultSettings.fullSummariesToInject;
     
     if (count === 1) {
         const latest = getLatestSnapshot(chatState);
@@ -109,5 +110,16 @@ export function buildSummaryText(chatState, settings) {
     if (count > 0) {
         lastSnapshots = chatState.snapshots.slice(-count);
     }
-    return lastSnapshots.map(s => `${s.title}: ${s.text}`).join('\n');
+
+    return lastSnapshots.map((s, index) => {
+        // If fullCount is 0, all are full.
+        // Otherwise, only the last 'fullCount' snapshots are full.
+        const isFull = fullCount === 0 || (lastSnapshots.length - index <= fullCount);
+        
+        if (isFull) {
+            return `${s.title}: ${s.text}`;
+        } else {
+            return `${s.title}: ${s.description || 'No description available.'}`;
+        }
+    }).join('\n');
 }

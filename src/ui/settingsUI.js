@@ -101,6 +101,12 @@ export function bindSettingsUI(container) {
             applyInjection();
         }
 
+        if (name === 'fullSummariesToInject') {
+            const display = container.querySelector('#ss_fullSummariesToInject_value');
+            if (display) display.textContent = newValue;
+            applyInjection();
+        }
+
         if (name === 'summaryContextDepth') {
             const display = container.querySelector('#ss_summaryContextDepth_value');
             if (display) display.textContent = newValue;
@@ -405,6 +411,7 @@ export function updateSettingsUI(container) {
     setValue('#ss_consolidationPrompt', settings.consolidationPrompt ?? defaultSettings.consolidationPrompt);
     setValue('#ss_summaryWords', settings.summaryWords ?? defaultSettings.summaryWords);
     setValue('#ss_summariesToInject', settings.summariesToInject ?? defaultSettings.summariesToInject);
+    setValue('#ss_fullSummariesToInject', settings.fullSummariesToInject ?? defaultSettings.fullSummariesToInject);
     setValue('#ss_debugMode', settings.debugMode ?? defaultSettings.debugMode);
     setValue('#ss_injectEnabled', settings.injectEnabled ?? defaultSettings.injectEnabled);
     setValue('#ss_injectDepth', settings.injectDepth ?? defaultSettings.injectDepth);
