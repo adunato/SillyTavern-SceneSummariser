@@ -5,7 +5,7 @@ import { getContext, extension_settings } from '../../../../../extensions.js';
 import { buildExtractionPrompt, parseExtractionResponse } from '../core/engine.js';
 import { callSummarisationLLM } from '../core/llmApi.js';
 import { showCombinedEditor, showSummaryEditor } from './editorUI.js';
-import { getSSMemoryFileName, persistMemoriesForChat } from '../storage/memoryFileHandler.js';
+import { persistMemoriesForChat } from '../storage/memoryFileHandler.js';
 import { applyInjection, insertSceneBreakMarker } from '../core/injector.js';
 import { updateSettingsUI } from './settingsUI.js';
 import { saveSettingsDebounced, reloadCurrentChat } from '../../../../../../script.js';
