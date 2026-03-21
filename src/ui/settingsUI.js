@@ -18,14 +18,55 @@ export function togglePanel(container, selector) {
     panel.style.display = isHidden ? '' : 'none';
 }
 
+export function updatePromptVisibility(container) {
+    if (!container) return;
+    const settings = extension_settings[settingsKey] || defaultSettings;
+    const memoryEnabled = settings.memoryExtractionEnabled ?? defaultSettings.memoryExtractionEnabled;
+
+    const summaryPromptEl = container.querySelector('#ss_summaryPrompt');
+    const summaryHintEl = container.querySelector('#ss_summaryPrompt_hint');
+    const memoryPromptEl = container.querySelector('#ss_memoryPrompt');
+    const memoryHintEl = container.querySelector('#ss_memoryPrompt_hint');
+
+    if (summaryPromptEl) {
+        // @ts-ignore
+        summaryPromptEl.disabled = memoryEnabled;
+        // @ts-ignore
+        summaryPromptEl.style.opacity = memoryEnabled ? '0.5' : '1';
+        if (summaryHintEl) {
+            summaryHintEl.textContent = memoryEnabled
+                ? '⚠️ Disabled: Using the combined "Extraction Prompt" below.'
+                : 'Prompt used to generate summaries.';
+            // @ts-ignore
+            summaryHintEl.style.color = memoryEnabled ? 'var(--smart-theme-yellow)' : '';
+        }
+    }
+
+    if (memoryPromptEl) {
+        // @ts-ignore
+        memoryPromptEl.disabled = !memoryEnabled;
+        // @ts-ignore
+        memoryPromptEl.style.opacity = !memoryEnabled ? '0.5' : '1';
+        if (memoryHintEl) {
+            memoryHintEl.textContent = !memoryEnabled
+                ? '⚠️ Disabled: Using the standard "Summary Prompt" above.'
+                : 'This prompt replaces the Summary Prompt when extraction is enabled. Must include <summary> and <memory> tags.';
+            // @ts-ignore
+            memoryHintEl.style.color = !memoryEnabled ? 'var(--smart-theme-yellow)' : '';
+        }
+    }
+}
+
 export function bindSettingsUI(container) {
     if (!container) return;
 
     // 1) Standard inputs
     container.addEventListener('input', (event) => {
         const target = event.target;
+        // @ts-ignore
         if (!target.classList?.contains('ss-setting-input')) return;
 
+        // @ts-ignore
         const { name, type, value, checked } = target;
         if (!name) return;
 
@@ -48,6 +89,10 @@ export function bindSettingsUI(container) {
 
         if (name === 'limitToUnsummarised') {
             updateContextControlVisibility(container);
+        }
+
+        if (name === 'memoryExtractionEnabled') {
+            updatePromptVisibility(container);
         }
 
         if (name === 'batchSize') {
@@ -379,21 +424,7 @@ export function updateSettingsUI(container) {
 
     updateInjectionVisibility(container);
     updateContextControlVisibility(container);
-
-    // Visual feedback for prompt inheritance
-    const memoryEnabled = settings.memoryExtractionEnabled ?? defaultSettings.memoryExtractionEnabled;
-    const summaryPromptEl = container.querySelector('#ss_summaryPrompt');
-    const summaryHintEl = container.querySelector('#ss_summaryPrompt_hint');
-    if (summaryPromptEl) {
-        summaryPromptEl.disabled = memoryEnabled;
-        summaryPromptEl.style.opacity = memoryEnabled ? '0.5' : '1';
-        if (summaryHintEl) {
-            summaryHintEl.textContent = memoryEnabled
-                ? '⚠️ Disabled: Using the combined "Extraction Prompt" below.'
-                : 'Prompt used to generate summaries.';
-            summaryHintEl.style.color = memoryEnabled ? 'var(--smart-theme-yellow)' : '';
-        }
-    }
+    updatePromptVisibility(container);
 
     const wordsDisplay = container.querySelector('#ss_summaryWords_value');
     if (wordsDisplay) wordsDisplay.textContent = settings.summaryWords ?? defaultSettings.summaryWords;
