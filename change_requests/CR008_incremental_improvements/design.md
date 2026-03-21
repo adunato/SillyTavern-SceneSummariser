@@ -20,6 +20,10 @@ This change request covers a series of incremental improvements and bug fixes fo
      - **Injection Template**: `{{summary}}`, `{{last_messages}}`, `{{words}}`.
    - Use a styled `.variable-legend` class in `style.css` for consistent appearance.
 
+3. **Description for Word limit**
+   - Add a helpful description for the "Word limit" slider in the Advanced Control section.
+   - Clarify that it controls the `{{words}}` variable used in prompt templates.
+
 ## Affected Files
 - `src/ui/settingsUI.js`: UI logic for enabling/disabling inputs.
 - `settings.html`: UI structure for variable legends.
