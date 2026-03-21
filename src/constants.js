@@ -7,8 +7,7 @@ export const defaultSettings = {
     summaryPrompt: 'Ignore previous instructions. Summarize the most important facts and events in the story so far. If a summary already exists in your memory, use that as a base and expand with new facts. Limit the summary to {{words}} words or less. Your response must include exactly three components:\n\n1. A single <title> block containing a brief title for the scene.\n2. A single <description> block containing a short description of the scene.\n3. A single <summary> block containing the plot summary.',
     consolidationPrompt: 'Create a single, cohesive summary by merging the following scene summaries. Remove redundant information and ensure the narrative flows logically. Limit the final summary to {{words}} words or less. Your response must include exactly three components:\n\n1. A single <title> block containing a brief title for the consolidated scene.\n2. A single <description> block containing a short description of the consolidated scene.\n3. A single <summary> block containing the merged plot summary.',
     summaryWords: 200,
-    storeHistory: true,
-    maxSummaries: 5,
+    summariesToInject: 5, // Replaces storeHistory (bool) and maxSummaries (int)
     debugMode: false,
     injectEnabled: true,
     injectPosition: 0, // In Prompt
@@ -23,13 +22,13 @@ export const defaultSettings = {
     keepMessagesCount: 0,
     connectionProfileId: '',
     manualSummaryLimit: 0, // 0 = unlimited
-    summaryHistoryDepth: 0, // 0 = all
+    summaryContextDepth: 0, // Replaces summaryHistoryDepth. 0 = all
     // Memory extraction (§2)
     memoryExtractionEnabled: true,
     memoryPrompt: `You are an assistant tasked with updating a story's progression by summarizing recent events and extracting significant long-term character memories.
 
 ===== CONTEXT & INPUTS =====
-Character Name: {{charName}}
+Participating Characters: {{charNames}}
 Existing Memories (Do not repeat or remix): {{existingMemories}}
 
 # ===== RECENT MESSAGES (Summarize and extract ONLY from here) =====
@@ -55,35 +54,38 @@ Short description of the scene.
 Raw summary text goes here...
 </summary>
 <memory>
-* Memory bullet 1
-* Memory bullet 2
+* CharacterName: Memory bullet 1
+* CharacterA, CharacterB: Memory bullet 2
 </memory>
 
 ===== SUMMARY RULES =====
 1. Summarize ONLY the events in 'Recent Messages'. Focus strictly on plot progression and meaningful actions.
 2. Do NOT recap the 'Story Context' and DO NOT continue the story.
-3. Assume the reader is already familiar with the characters (e.g., use "Mary" rather than "Mary, a caring mother").
+3. Assume the reader is already familiar with the characters.
 4. Limit the summary text to {{words}} words.
 
 ===== MEMORY EXTRACTION RULES =====
 1. Extract only NEW facts, backstory reveals, relationship shifts, and emotional turning points NOT already covered by 'Existing Memories'.
-2. Write in past tense, third person. Always refer to {{charName}} by name. No emojis. Do not quote dialogue verbatim.
-3. Write about WHAT HAPPENED (outcomes), not the conversation itself or the step-by-step process. Never write "she told him about X" — write the actual fact: "X happened".
+2. Write in past tense, third person. No emojis. Do not quote dialogue verbatim.
+3. Write about WHAT HAPPENED (outcomes), not the conversation itself or the step-by-step process.
 4. HARD LIMIT: Max 5 bullet points. Keep only the most significant outcomes.
-5. DO NOT EXTRACT: Meta-narration, step-by-step accounts, scene-setting, temporary physical states, or trivial details. Ask yourself: "Would {{charName}} bring this up unprompted weeks later?"
+5. DO NOT EXTRACT: Meta-narration, step-by-step accounts, scene-setting, temporary physical states, or trivial details.
+6. Facts MUST be prefixed with the name of the character(s) holding the memory (e.g., "* CharacterName: fact...").
+7. The user should not be accounted for. Only extract memories for the Participating Characters.
+8. Do not assign memories to characters not present in the Participating Characters list.
 
 NEGATIVE MEMORY EXAMPLE (Do NOT write play-by-play like this):
 <memory>
-* Alex set the carrier down and opened the door.
-* Flux emerged and walked toward the Roomba.
-* Alex poured salmon pâté into a bowl.
-* Flux ate the salmon and purred.
+* Alex: Alex set the carrier down and opened the door.
+* Flux: Flux emerged and walked toward the Roomba.
+* Alex: Alex poured salmon pâté into a bowl.
+* Flux: Flux ate the salmon and purred.
 </memory>
 
 POSITIVE MEMORY EXAMPLE (Summarize the outcome):
 <memory>
-* Alex adopted Flux, who immediately bonded with a custom Roomba in the apartment.
-* Flux's first meal of premium salmon pâté triggered his first purr in the new home.
+* Alex, Flux: Alex adopted Flux, who immediately bonded with a custom Roomba in the apartment.
+* Flux: Flux's first meal of premium salmon pâté triggered his first purr in the new home.
 </memory>`,
     maxMemories: 0, // 0 = unlimited
 };

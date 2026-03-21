@@ -5,7 +5,7 @@ import { getContext, extension_settings } from '../../../../../extensions.js';
 import { buildExtractionPrompt, parseExtractionResponse } from '../core/engine.js';
 import { callSummarisationLLM } from '../core/llmApi.js';
 import { showCombinedEditor, showSummaryEditor } from './editorUI.js';
-import { getSSMemoryFileName, writeSSMemoriesFile } from '../storage/memoryFileHandler.js';
+import { getSSMemoryFileName, persistMemoriesForChat } from '../storage/memoryFileHandler.js';
 import { applyInjection, insertSceneBreakMarker } from '../core/injector.js';
 import { updateSettingsUI } from './settingsUI.js';
 import { saveSettingsDebounced, reloadCurrentChat } from '../../../../../../script.js';
@@ -132,7 +132,7 @@ export async function onSummariseClick() {
     const settings = extension_settings[settingsKey];
     const chatState = getChatState();
 
-    const historyDepth = Number(settings.summaryHistoryDepth || defaultSettings.summaryHistoryDepth);
+    const historyDepth = Number(settings.summaryContextDepth || defaultSettings.summaryContextDepth);
     let previousSnapshots = chatState.snapshots || [];
     if (historyDepth > 0 && previousSnapshots.length > historyDepth) {
         previousSnapshots = previousSnapshots.slice(-historyDepth);
@@ -230,21 +230,12 @@ export async function onSummariseClick() {
         const memoriesAdded = snapshot.memories.length;
 
         if (memoryEnabled && memoriesAdded > 0) {
-            const avatar = ctx?.characters?.[ctx?.characterId]?.avatar
-                // @ts-ignore
-                || (typeof characters !== 'undefined' ? characters[ctx?.characterId]?.avatar : undefined)
-                || ctx?.avatar; // Fallback to current context avatar
-
-            if (avatar) {
-                const chatId = getActiveChatId();
-                const fileName = getSSMemoryFileName(chatId);
-
-                await writeSSMemoriesFile(avatar, fileName, chatState.snapshots);
-
+            try {
+                await persistMemoriesForChat(chatState);
                 logDebug('log', `Persisted ${memoriesAdded} memories for ${snapshot.title}`);
                 toastr.info(`Saved summary and ${memoriesAdded} ${memoriesAdded === 1 ? 'fact' : 'facts'} to Data Bank.`, extensionName);
-            } else {
-                logDebug('warn', 'Memory extraction: no character avatar found, skipping Data Bank write');
+            } catch (err) {
+                logDebug('error', 'Memory extraction failed to persist', err?.message || err);
             }
         } else if (editedText) {
             toastr.info('Saved scene summary.', extensionName);
@@ -319,16 +310,8 @@ export async function onBatchSummariseClick() {
     chatState.summaryCounter = 0;
     chatState.lastSummarisedIndex = 0;
 
-    const ctx = getContext();
-    const avatar = ctx?.characters?.[ctx?.characterId]?.avatar
-        // @ts-ignore
-        || (typeof characters !== 'undefined' ? characters[ctx?.characterId]?.avatar : undefined);
-
     // Clear Data Bank file at start of batch
-    if (avatar) {
-        const fileName = getSSMemoryFileName(getActiveChatId());
-        await writeSSMemoriesFile(avatar, fileName, []);
-    }
+    await persistMemoriesForChat(chatState);
 
     const fullChat = ctx?.chat || [];
 
@@ -388,7 +371,7 @@ export async function onBatchSummariseClick() {
             button.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Batch ${i + 1} of ${totalBatches}...`;
         }
 
-        const historyDepth = Number(settings.summaryHistoryDepth || defaultSettings.summaryHistoryDepth);
+        const historyDepth = Number(settings.summaryContextDepth || defaultSettings.summaryContextDepth);
         let previousSnapshots = chatState.snapshots || [];
         if (historyDepth > 0 && previousSnapshots.length > historyDepth) {
             previousSnapshots = previousSnapshots.slice(-historyDepth);
@@ -449,23 +432,10 @@ export async function onBatchSummariseClick() {
             const memoriesAdded = snapshot.memories.length;
 
             if (memoryEnabled && memoriesAdded > 0) {
-                const batchCtx = getContext();
-                const avatar = batchCtx?.characters?.[batchCtx?.characterId]?.avatar
-                    // @ts-ignore
-                    || (typeof characters !== 'undefined' ? characters[batchCtx?.characterId]?.avatar : undefined)
-                    || batchCtx?.avatar;
-
-                if (avatar) {
-                    const chatId = getActiveChatId();
-                    const fileName = getSSMemoryFileName(chatId);
-                    
-                    // Fire-and-forget in batch: don't block the loop, but log errors
-                    writeSSMemoriesFile(avatar, fileName, chatState.snapshots).catch(err => {
-                        logDebug('error', `Batch memory write failed for ${snapshot.title}:`, err?.message || err);
-                    });
-
-                    logDebug('log', `Batch: persisted ${memoriesAdded} memories for ${snapshot.title}`);
-                }
+                persistMemoriesForChat(chatState).catch(err => {
+                    logDebug('error', `Batch memory write failed for ${snapshot.title}:`, err?.message || err);
+                });
+                logDebug('log', `Batch: persisted ${memoriesAdded} memories for ${snapshot.title}`);
             }
 
             if (settings.insertSceneBreak) {

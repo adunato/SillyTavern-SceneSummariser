@@ -1,6 +1,6 @@
 import { extensionName } from '../constants.js';
 import { logDebug } from '../utils/logger.js';
-import { extension_settings } from '../../../../../extensions.js';
+import { extension_settings, getContext } from '../../../../../extensions.js';
 import { saveSettingsDebounced } from '../../../../../../script.js';
 import {
     uploadFileAttachment,
@@ -8,6 +8,41 @@ import {
     deleteFileFromServer,
 } from '../../../../../../scripts/chats.js';
 import { getStringHash, convertTextToBase64 } from '../../../../../../scripts/utils.js';
+import { getActiveChatId } from '../state/stateManager.js';
+
+/**
+ * Persists all memories in the chatState to the Data Bank.
+ * Handles both 1-on-1 chats and group chats, dispatching facts to individual character files based on prefixes.
+ * @param {object} chatState 
+ */
+export async function persistMemoriesForChat(chatState) {
+    const ctx = getContext();
+    const chatId = getActiveChatId();
+    
+    if (ctx?.groupId && Array.isArray(ctx?.groups) && Array.isArray(ctx?.characters)) {
+        const group = ctx.groups.find(g => g.id === ctx.groupId);
+        if (group && Array.isArray(group.members)) {
+            for (const avatar of group.members) {
+                const char = ctx.characters.find(c => c.avatar === avatar);
+                if (char && char.name) {
+                    const fileName = getSSMemoryFileName(chatId);
+                    await writeSSMemoriesFile(avatar, fileName, chatState.snapshots, char.name);
+                }
+            }
+            return;
+        }
+    }
+
+    const avatar = ctx?.characters?.[ctx?.characterId]?.avatar
+        // @ts-ignore
+        || (typeof characters !== 'undefined' ? characters[ctx?.characterId]?.avatar : undefined)
+        || ctx?.avatar;
+    
+    if (avatar) {
+        const fileName = getSSMemoryFileName(chatId);
+        await writeSSMemoriesFile(avatar, fileName, chatState.snapshots);
+    }
+}
 
 /**
  * Returns the Data Bank filename used to store extracted memories for a given chat.
@@ -107,12 +142,13 @@ export async function appendSSMemoriesBlock(avatar, fileName, newBlockMarkdown) 
 /**
  * Rebuilds and overwrites the entire Data Bank memory file from the current chatState index.
  * Used after manual edits or deletions.
- * @param {string} avatar
- * @param {string} fileName
+ * @param {string} avatar The character's avatar path (used as the Data Bank key).
+ * @param {string} fileName The file name to use.
  * @param {object[]} snapshots List of snapshot objects from chatState.
+ * @param {string} [characterName] The character's name to filter facts by. If not provided, writes all facts.
  */
-export async function writeSSMemoriesFile(avatar, fileName, snapshots) {
-    console.log(`[${extensionName}] writeSSMemoriesFile called for avatar: ${avatar}, fileName: ${fileName}`);
+export async function writeSSMemoriesFile(avatar, fileName, snapshots, characterName = null) {
+    console.log(`[${extensionName}] writeSSMemoriesFile called for avatar: ${avatar}, fileName: ${fileName}, filter: ${characterName}`);
     if (!extension_settings.character_attachments) extension_settings.character_attachments = {};
     if (!Array.isArray(extension_settings.character_attachments[avatar])) {
         extension_settings.character_attachments[avatar] = [];
@@ -123,8 +159,24 @@ export async function writeSSMemoriesFile(avatar, fileName, snapshots) {
     for (const snapshot of snapshots) {
         if (snapshot.memories && snapshot.memories.length > 0) {
             const timestamp = new Date(snapshot.createdAt || Date.now()).toISOString().slice(0, 16).replace('T', ' ');
-            const bullets = snapshot.memories.map(t => `- ${t}`).join('\n');
-            blocks.push(`<memory chat="${snapshot.title}" date="${timestamp}">\n${bullets}\n</memory>`);
+            
+            // Filter facts for the target character if provided
+            let filteredMemories = snapshot.memories;
+            if (characterName) {
+                filteredMemories = snapshot.memories.filter(mem => {
+                    const match = mem.match(/^([^:]+):/);
+                    if (match) {
+                        const chars = match[1].split(',').map(c => c.trim()).filter(c => c);
+                        return chars.includes(characterName);
+                    }
+                    return false; // If no prefix, it's malformed or legacy; exclude it from group writes
+                });
+            }
+
+            if (filteredMemories.length > 0) {
+                const bullets = filteredMemories.map(t => `- ${t}`).join('\n');
+                blocks.push(`<memory chat="${snapshot.title}" date="${timestamp}">\n${bullets}\n</memory>`);
+            }
         }
     }
 

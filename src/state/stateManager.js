@@ -55,6 +55,22 @@ export function ensureSettings() {
         }
     }
 
+    // Migration for CR008
+    const settings = extension_settings[settingsKey];
+    if (settings.storeHistory !== undefined) {
+        if (settings.storeHistory === false) {
+            settings.summariesToInject = 1;
+        } else {
+            settings.summariesToInject = settings.maxSummaries !== undefined ? settings.maxSummaries : defaultSettings.summariesToInject;
+        }
+        delete settings.storeHistory;
+        delete settings.maxSummaries;
+    }
+    if (settings.summaryHistoryDepth !== undefined) {
+        settings.summaryContextDepth = settings.summaryHistoryDepth;
+        delete settings.summaryHistoryDepth;
+    }
+
     if (!extension_settings[settingsKey].chatStates || typeof extension_settings[settingsKey].chatStates !== 'object') {
         extension_settings[settingsKey].chatStates = {};
     }

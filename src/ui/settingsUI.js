@@ -1,9 +1,9 @@
 import { extensionName, settingsKey, defaultSettings, state } from '../constants.js';
 import { logDebug } from '../utils/logger.js';
-import { getChatState } from '../state/stateManager.js';
+import { getChatState, getActiveChatId } from '../state/stateManager.js';
 import { buildSummaryText } from '../core/engine.js';
 import { applyInjection, updateInjectionVisibility, updateContextControlVisibility } from '../core/injector.js';
-import { getSSMemoryFileName, writeSSMemoriesFile } from '../storage/memoryFileHandler.js';
+import { persistMemoriesForChat } from '../storage/memoryFileHandler.js';
 import { extension_settings, renderExtensionTemplateAsync, getContext } from '../../../../../extensions.js';
 import { saveSettingsDebounced } from '../../../../../../script.js';
 import { ConnectionManagerRequestService } from '../../../../shared.js';
@@ -18,14 +18,55 @@ export function togglePanel(container, selector) {
     panel.style.display = isHidden ? '' : 'none';
 }
 
+export function updatePromptVisibility(container) {
+    if (!container) return;
+    const settings = extension_settings[settingsKey] || defaultSettings;
+    const memoryEnabled = settings.memoryExtractionEnabled ?? defaultSettings.memoryExtractionEnabled;
+
+    const summaryPromptEl = container.querySelector('#ss_summaryPrompt');
+    const summaryHintEl = container.querySelector('#ss_summaryPrompt_hint');
+    const memoryPromptEl = container.querySelector('#ss_memoryPrompt');
+    const memoryHintEl = container.querySelector('#ss_memoryPrompt_hint');
+
+    if (summaryPromptEl) {
+        // @ts-ignore
+        summaryPromptEl.disabled = memoryEnabled;
+        // @ts-ignore
+        summaryPromptEl.style.opacity = memoryEnabled ? '0.5' : '1';
+        if (summaryHintEl) {
+            summaryHintEl.textContent = memoryEnabled
+                ? '⚠️ Disabled: Using the combined "Extraction Prompt" below.'
+                : 'Prompt used to generate summaries.';
+            // @ts-ignore
+            summaryHintEl.style.color = memoryEnabled ? 'var(--smart-theme-yellow)' : '';
+        }
+    }
+
+    if (memoryPromptEl) {
+        // @ts-ignore
+        memoryPromptEl.disabled = !memoryEnabled;
+        // @ts-ignore
+        memoryPromptEl.style.opacity = !memoryEnabled ? '0.5' : '1';
+        if (memoryHintEl) {
+            memoryHintEl.textContent = !memoryEnabled
+                ? '⚠️ Disabled: Using the standard "Summary Prompt" above.'
+                : 'This prompt replaces the Summary Prompt when extraction is enabled. Must include <summary> and <memory> tags.';
+            // @ts-ignore
+            memoryHintEl.style.color = !memoryEnabled ? 'var(--smart-theme-yellow)' : '';
+        }
+    }
+}
+
 export function bindSettingsUI(container) {
     if (!container) return;
 
     // 1) Standard inputs
     container.addEventListener('input', (event) => {
         const target = event.target;
+        // @ts-ignore
         if (!target.classList?.contains('ss-setting-input')) return;
 
+        // @ts-ignore
         const { name, type, value, checked } = target;
         if (!name) return;
 
@@ -50,6 +91,21 @@ export function bindSettingsUI(container) {
             updateContextControlVisibility(container);
         }
 
+        if (name === 'memoryExtractionEnabled') {
+            updatePromptVisibility(container);
+        }
+
+        if (name === 'summariesToInject') {
+            const display = container.querySelector('#ss_summariesToInject_value');
+            if (display) display.textContent = newValue;
+            applyInjection();
+        }
+
+        if (name === 'summaryContextDepth') {
+            const display = container.querySelector('#ss_summaryContextDepth_value');
+            if (display) display.textContent = newValue;
+        }
+
         if (name === 'batchSize') {
             const display = container.querySelector('#ss_batchSize_value');
             if (display) display.textContent = newValue;
@@ -67,11 +123,6 @@ export function bindSettingsUI(container) {
 
         if (name === 'manualSummaryLimit') {
             const display = container.querySelector('#ss_manualSummaryLimit_value');
-            if (display) display.textContent = newValue;
-        }
-
-        if (name === 'summaryHistoryDepth') {
-            const display = container.querySelector('#ss_summaryHistoryDepth_value');
             if (display) display.textContent = newValue;
         }
 
@@ -127,6 +178,32 @@ export function bindSettingsUI(container) {
             return;
         }
 
+        // Snapshot inner character tabs
+        const snapTabBtn = event.target.closest('.ss-snap-tab-btn');
+        if (snapTabBtn) {
+            const char = snapTabBtn.dataset.char;
+            const snapId = snapTabBtn.dataset.snapId;
+            const itemContainer = container.querySelector(`.ss-snap-memories-container[data-snap-id="${snapId}"]`);
+            if (itemContainer) {
+                const allTabs = snapTabBtn.parentElement.querySelectorAll('.ss-snap-tab-btn');
+                allTabs.forEach(t => t.classList.remove('active'));
+                snapTabBtn.classList.add('active');
+
+                const items = itemContainer.querySelectorAll('.ss-memory-edit-item');
+                items.forEach(item => {
+                    if (char === 'All') {
+                        // @ts-ignore
+                        item.style.display = '';
+                    } else {
+                        const itemChars = (item.dataset.chars || '').split('||');
+                        // @ts-ignore
+                        item.style.display = itemChars.includes(char) ? '' : 'none';
+                    }
+                });
+            }
+            return;
+        }
+
         // Accordion header expand/collapse
         const headerEl = event.target.closest('.ss-snapshot-header');
         if (headerEl && !event.target.closest('.ss-no-propagate')) {
@@ -177,14 +254,7 @@ export function bindSettingsUI(container) {
             if (snap && snap.memories) {
                 snap.memories.splice(index, 1);
                 
-                const ctx = getContext();
-                const avatar = ctx?.characters?.[ctx?.characterId]?.avatar
-                    // @ts-ignore
-                    || (typeof characters !== 'undefined' ? characters[ctx?.characterId]?.avatar : undefined);
-                if (avatar) {
-                    const fileName = getSSMemoryFileName(chatState.chatId || getActiveChatId());
-                    writeSSMemoriesFile(avatar, fileName, chatState.snapshots).catch(err => logDebug('error', 'writeSSMemoriesFile', err));
-                }
+                persistMemoriesForChat(chatState).catch(err => logDebug('error', 'persistMemoriesForChat', err));
                 
                 saveSettingsDebounced();
                 renderSnapshotsList(container, chatState, extension_settings[settingsKey]);
@@ -209,14 +279,7 @@ export function bindSettingsUI(container) {
 
                 clearTimeout(snap.memoryRewriteTimeout);
                 snap.memoryRewriteTimeout = setTimeout(() => {
-                    const ctx = getContext();
-                    const avatar = ctx?.characters?.[ctx?.characterId]?.avatar
-                        // @ts-ignore
-                        || (typeof characters !== 'undefined' ? characters[ctx?.characterId]?.avatar : undefined);
-                    if (avatar) {
-                        const fileName = getSSMemoryFileName(chatState.chatId || getActiveChatId());
-                        writeSSMemoriesFile(avatar, fileName, chatState.snapshots).catch(err => logDebug('error', 'writeSSMemoriesFile', err));
-                    }
+                    persistMemoriesForChat(chatState).catch(err => logDebug('error', 'persistMemoriesForChat', err));
                 }, 2000);
             }
             return;
@@ -341,8 +404,7 @@ export function updateSettingsUI(container) {
     setValue('#ss_summaryPrompt', settings.summaryPrompt ?? defaultSettings.summaryPrompt);
     setValue('#ss_consolidationPrompt', settings.consolidationPrompt ?? defaultSettings.consolidationPrompt);
     setValue('#ss_summaryWords', settings.summaryWords ?? defaultSettings.summaryWords);
-    setValue('#ss_storeHistory', settings.storeHistory ?? defaultSettings.storeHistory);
-    setValue('#ss_maxSummaries', settings.maxSummaries ?? defaultSettings.maxSummaries);
+    setValue('#ss_summariesToInject', settings.summariesToInject ?? defaultSettings.summariesToInject);
     setValue('#ss_debugMode', settings.debugMode ?? defaultSettings.debugMode);
     setValue('#ss_injectEnabled', settings.injectEnabled ?? defaultSettings.injectEnabled);
     setValue('#ss_injectDepth', settings.injectDepth ?? defaultSettings.injectDepth);
@@ -355,7 +417,7 @@ export function updateSettingsUI(container) {
     setValue('#ss_maxBatchSummaries', settings.maxBatchSummaries ?? defaultSettings.maxBatchSummaries);
     setValue('#ss_keepMessagesCount', settings.keepMessagesCount ?? defaultSettings.keepMessagesCount);
     setValue('#ss_manualSummaryLimit', settings.manualSummaryLimit ?? defaultSettings.manualSummaryLimit);
-    setValue('#ss_summaryHistoryDepth', settings.summaryHistoryDepth ?? defaultSettings.summaryHistoryDepth);
+    setValue('#ss_summaryContextDepth', settings.summaryContextDepth ?? defaultSettings.summaryContextDepth);
     // Memory extraction (§2)
     setValue('#ss_memoryExtractionEnabled', settings.memoryExtractionEnabled ?? defaultSettings.memoryExtractionEnabled);
     setValue('#ss_memoryPrompt', settings.memoryPrompt ?? defaultSettings.memoryPrompt);
@@ -367,24 +429,16 @@ export function updateSettingsUI(container) {
 
     updateInjectionVisibility(container);
     updateContextControlVisibility(container);
-
-    // Visual feedback for prompt inheritance
-    const memoryEnabled = settings.memoryExtractionEnabled ?? defaultSettings.memoryExtractionEnabled;
-    const summaryPromptEl = container.querySelector('#ss_summaryPrompt');
-    const summaryHintEl = container.querySelector('#ss_summaryPrompt_hint');
-    if (summaryPromptEl) {
-        summaryPromptEl.disabled = memoryEnabled;
-        summaryPromptEl.style.opacity = memoryEnabled ? '0.5' : '1';
-        if (summaryHintEl) {
-            summaryHintEl.textContent = memoryEnabled
-                ? '⚠️ Disabled: Using the combined "Extraction Prompt" below.'
-                : 'Prompt used to generate summaries.';
-            summaryHintEl.style.color = memoryEnabled ? 'var(--smart-theme-yellow)' : '';
-        }
-    }
+    updatePromptVisibility(container);
 
     const wordsDisplay = container.querySelector('#ss_summaryWords_value');
     if (wordsDisplay) wordsDisplay.textContent = settings.summaryWords ?? defaultSettings.summaryWords;
+
+    const summariesToInjectDisplay = container.querySelector('#ss_summariesToInject_value');
+    if (summariesToInjectDisplay) summariesToInjectDisplay.textContent = settings.summariesToInject ?? defaultSettings.summariesToInject;
+
+    const summaryContextDepthDisplay = container.querySelector('#ss_summaryContextDepth_value');
+    if (summaryContextDepthDisplay) summaryContextDepthDisplay.textContent = settings.summaryContextDepth ?? defaultSettings.summaryContextDepth;
 
     const batchSizeDisplay = container.querySelector('#ss_batchSize_value');
     if (batchSizeDisplay) batchSizeDisplay.textContent = settings.batchSize ?? defaultSettings.batchSize;
@@ -397,9 +451,6 @@ export function updateSettingsUI(container) {
 
     const manualSummaryLimitDisplay = container.querySelector('#ss_manualSummaryLimit_value');
     if (manualSummaryLimitDisplay) manualSummaryLimitDisplay.textContent = settings.manualSummaryLimit ?? defaultSettings.manualSummaryLimit;
-
-    const summaryHistoryDepthDisplay = container.querySelector('#ss_summaryHistoryDepth_value');
-    if (summaryHistoryDepthDisplay) summaryHistoryDepthDisplay.textContent = settings.summaryHistoryDepth ?? defaultSettings.summaryHistoryDepth;
 
     const currentSummary = container.querySelector('#ss_currentSummary');
     if (currentSummary) currentSummary.value = buildSummaryText(chatState, settings);

@@ -138,6 +138,20 @@
 .st-extension .control-group:last-child { margin-bottom: 0; }
 .st-extension label.block-label { display: block; margin-bottom: 6px; font-size: 0.9em; font-weight: 500; }
 .st-extension .help-text { font-size: 0.8em; color: var(--text-muted); margin-top: 4px; display: block; line-height: 1.4; }
+.st-extension .variable-legend {
+    margin-top: 6px;
+    padding: 6px 8px;
+    background-color: var(--bg-section);
+    border: 1px dashed var(--border-color);
+    border-radius: 4px;
+    font-size: 0.75em;
+}
+.st-extension .variable-legend code {
+    color: var(--accent-color);
+    font-family: var(--mono-font, monospace);
+    background: none;
+    padding: 0;
+}
 .st-extension .warning-text { color: var(--smart-theme-yellow, #cc8844); font-size: 0.8em; margin-top: 4px; display: block; }
 
 /* Inputs & Textareas */

@@ -1,7 +1,6 @@
 import { getContext } from '../../../../../extensions.js';
 import { defaultSettings } from '../constants.js';
 import { logDebug } from '../utils/logger.js';
-import { getSSMemoryFileName, writeSSMemoriesFile } from '../storage/memoryFileHandler.js';
 import { getActiveChatId } from '../state/stateManager.js';
 
 export function parseExtractionResponse(raw) {
@@ -55,7 +54,21 @@ export function parseExtractionResponse(raw) {
  */
 export function buildExtractionPrompt(transcript, settings, previousSummaryText, chatState = {}) {
     const ctx = getContext();
-    const charName = ctx?.name2 || 'Character';
+    
+    let charNames = ctx?.name2 || 'Character';
+    if (ctx?.groupId && Array.isArray(ctx?.groups) && Array.isArray(ctx?.characters)) {
+        const group = ctx.groups.find(g => g.id === ctx.groupId);
+        if (group && Array.isArray(group.members)) {
+            const memberNames = group.members.map(avatar => {
+                const char = ctx.characters.find(c => c.avatar === avatar);
+                return char ? char.name : null;
+            }).filter(Boolean);
+            if (memberNames.length > 0) {
+                charNames = memberNames.join(', ');
+            }
+        }
+    }
+
     const words = settings.summaryWords || defaultSettings.summaryWords;
     const enabled = settings.memoryExtractionEnabled ?? defaultSettings.memoryExtractionEnabled;
     const template = enabled
@@ -73,7 +86,8 @@ export function buildExtractionPrompt(transcript, settings, previousSummaryText,
         .replace(/\{\{words\}\}/g, words)
         .replace(/\{\{summary\}\}/g, previousSummaryText || '')
         .replace(/\{\{last_messages\}\}/g, transcript || '(no messages)')
-        .replace(/\{\{charName\}\}/g, charName)
+        .replace(/\{\{charNames\}\}/g, charNames)
+        .replace(/\{\{charName\}\}/g, charNames) // fallback for older prompts
         .replace(/\{\{existingMemories\}\}/g, existingMemories);
 }
 
@@ -84,14 +98,16 @@ export function getLatestSnapshot(chatState) {
 
 export function buildSummaryText(chatState, settings) {
     if (!chatState?.snapshots?.length) return '';
-    if (settings?.storeHistory) {
-        const max = settings.maxSummaries !== undefined ? settings.maxSummaries : defaultSettings.maxSummaries;
-        let lastSnapshots = chatState.snapshots;
-        if (max > 0) {
-            lastSnapshots = chatState.snapshots.slice(-max);
-        }
-        return lastSnapshots.map(s => `${s.title}: ${s.text}`).join('\n');
+    const count = settings?.summariesToInject !== undefined ? settings.summariesToInject : defaultSettings.summariesToInject;
+    
+    if (count === 1) {
+        const latest = getLatestSnapshot(chatState);
+        return latest ? `${latest.title}: ${latest.text}` : '';
     }
-    const latest = getLatestSnapshot(chatState);
-    return latest ? `${latest.title}: ${latest.text}` : '';
+
+    let lastSnapshots = chatState.snapshots;
+    if (count > 0) {
+        lastSnapshots = chatState.snapshots.slice(-count);
+    }
+    return lastSnapshots.map(s => `${s.title}: ${s.text}`).join('\n');
 }
