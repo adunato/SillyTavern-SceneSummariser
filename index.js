@@ -20,9 +20,10 @@ jQuery(async () => {
         eventSource?.on(event_types.CHAT_CHANGED, onChatChanged);
         logDebug('log', 'Registered prompt filter listeners (migrated to generate_interceptor)');
     } catch (err) {
-        console.error(`[${extensionName}] Failed to register prompt filter:`, err);
+        console.error(`[${extensionName}] Failed to register event listeners:`, err);
     }
 });
 
 // Expose the interceptor globally matching the name in manifest.json
 window['SceneSummariser_filterContextInterceptor'] = filterContextInterceptor;
+

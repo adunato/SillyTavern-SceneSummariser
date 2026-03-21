@@ -98,16 +98,32 @@ export function getLatestSnapshot(chatState) {
 
 export function buildSummaryText(chatState, settings) {
     if (!chatState?.snapshots?.length) return '';
-    const count = settings?.summariesToInject !== undefined ? settings.summariesToInject : defaultSettings.summariesToInject;
-    
-    if (count === 1) {
-        const latest = getLatestSnapshot(chatState);
-        return latest ? `${latest.title}: ${latest.text}` : '';
-    }
+    const count = Number(settings?.summariesToInject !== undefined ? settings.summariesToInject : defaultSettings.summariesToInject);
+    const fullCount = Number(settings?.fullSummariesToInject !== undefined ? settings.fullSummariesToInject : defaultSettings.fullSummariesToInject);
 
     let lastSnapshots = chatState.snapshots;
     if (count > 0) {
         lastSnapshots = chatState.snapshots.slice(-count);
     }
-    return lastSnapshots.map(s => `${s.title}: ${s.text}`).join('\n');
+
+    return lastSnapshots.map((s, index) => {
+        // If fullCount is 0, all injected snapshots are full text.
+        // Otherwise, only the last 'fullCount' snapshots in the injected list are full text.
+        const isFull = fullCount === 0 || (lastSnapshots.length - index <= fullCount);
+
+        let blockText = '';
+        if (isFull) {
+            blockText = `${s.title}: ${s.text}`;
+        } else {
+            blockText = `${s.title}: ${s.description || 'No description available.'}`;
+        }
+
+        const memoryEnabled = settings?.memoryExtractionEnabled ?? defaultSettings.memoryExtractionEnabled;
+        if (memoryEnabled && s.memories && s.memories.length > 0) {
+            const memoriesList = s.memories.map(m => `- ${m}`).join('\n');
+            blockText += `\nMemories:\n${memoriesList}`;
+        }
+
+        return blockText;
+    }).join('\n\n');
 }

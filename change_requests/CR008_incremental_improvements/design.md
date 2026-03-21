@@ -32,6 +32,7 @@ This change request covers a series of incremental improvements and bug fixes fo
      - Consolidate "Store History" & "Max Snapshots History" ➔ "Summaries to Inject in Chat" (`summariesToInject`).
      - This controls how many snapshots are injected into the active chat prompt (1 = latest only, 0 = all).
      - Merged the "Injection" section into this block for better organization.
+     - Added "Retain full summaries" (`fullSummariesToInject`). This setting determines how many of the most recent summaries are injected as full text. Older injected summaries will only include their title and description. 0 = all injected summaries are full text.
    - Added migration logic to `src/state/stateManager.js` to preserve user choices during the transition.
 
 ## Affected Files

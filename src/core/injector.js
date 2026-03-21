@@ -46,9 +46,13 @@ export function updateContextControlVisibility(container) {
 export function applyInjection() {
     const settings = extension_settings[settingsKey];
     const chatState = getChatState();
+    
+    logDebug('log', `[applyInjection] Triggered. enabled=${settings?.enabled}, injectEnabled=${settings?.injectEnabled}`);
+    
     if (!settings || !settings.injectEnabled || !settings.enabled) {
         try {
             setExtensionPrompt(extensionName, '', extension_prompt_types.IN_PROMPT, 0, false, extension_prompt_roles.SYSTEM);
+            logDebug('log', '[applyInjection] Cleared injection because extension or injection is disabled.');
         } catch (err) {
             console.error(`[${extensionName}] Failed to clear injection:`, err);
         }
@@ -59,6 +63,7 @@ export function applyInjection() {
     if (position === extension_prompt_types.NONE) {
         try {
             setExtensionPrompt(extensionName, '', extension_prompt_types.IN_PROMPT, 0, false, extension_prompt_roles.SYSTEM);
+            logDebug('log', '[applyInjection] Cleared injection because position is NONE.');
         } catch (err) {
             console.error(`[${extensionName}] Failed to clear injection (NONE):`, err);
         }
@@ -66,8 +71,13 @@ export function applyInjection() {
     }
 
     const template = settings.injectTemplate || defaultSettings.injectTemplate;
+    const summaryText = buildSummaryText(chatState, settings);
+    
+    logDebug('log', `[applyInjection] Template used: "${template}"`);
+    logDebug('log', `[applyInjection] Generated summaryText length: ${summaryText ? summaryText.length : 0}`);
+    
     const value = template
-        .replace('{{summary}}', buildSummaryText(chatState, settings));
+        .replace(/\{\{summary\}\}/ig, summaryText);
 
     const depth = Number(settings.injectDepth ?? 2);
     const scan = !!settings.injectScan;
@@ -75,8 +85,8 @@ export function applyInjection() {
 
     try {
         setExtensionPrompt(extensionName, value, position, depth, scan, role);
-        const valuePreview = value ? (value.substring(0, 50).replace(/\n/g, ' ') + '...') : '[empty]';
-        logDebug('log', `[applyInjection] Injection updated (pos=${position}, depth=${depth}, scan=${scan}, role=${role}). Value preview: ${valuePreview}, value length: ${value ? value.length : 0}`);
+        const valuePreview = value ? (value.substring(0, 100).replace(/\n/g, ' ') + '...') : '[empty]';
+        logDebug('log', `[applyInjection] Injection successful (pos=${position}, depth=${depth}, scan=${scan}, role=${role}). Value preview: ${valuePreview}`);
     } catch (err) {
         console.error(`[${extensionName}] Failed to set injection prompt:`, err);
         logDebug('error', 'Failed to set injection prompt', err?.message || err);
@@ -134,7 +144,13 @@ export async function filterContextInterceptor(chat, maxContext, abort, type) {
 
     ensureSettings();
     const settings = extension_settings[settingsKey];
-    logDebug('log', `[filterContextInterceptor] Triggered. type=${type}, maxContext=${maxContext}, original_chat_length=${chat.length}, limitToUnsummarised=${settings?.limitToUnsummarised}`);
+    const chatState = getChatState();
+    
+    // Quick debug of what is about to be injected
+    const currentSummary = buildSummaryText(chatState, settings);
+    logDebug('log', `[filterContextInterceptor] Triggered. type=${type}, maxContext=${maxContext}. Injection summary length: ${currentSummary ? currentSummary.length : 0}`);
+
+    logDebug('log', `[filterContextInterceptor] limitToUnsummarised=${settings?.limitToUnsummarised}`);
 
     if (!settings?.limitToUnsummarised) {
         logDebug('log', '[filterContextInterceptor] limitToUnsummarised is disabled. Bailing out.');
