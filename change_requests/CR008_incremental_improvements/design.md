@@ -17,7 +17,7 @@ This change request covers a series of incremental improvements and bug fixes fo
      - **Summary Prompt**: `{{words}}`, `{{summary}}`, `{{last_messages}}`, `{{charNames}}`, `{{existingMemories}}`.
      - **Consolidation Prompt**: `{{words}}`.
      - **Extraction Prompt**: `{{words}}`, `{{summary}}`, `{{last_messages}}`, `{{charNames}}`, `{{existingMemories}}`.
-     - **Injection Template**: `{{summary}}`, `{{last_messages}}`, `{{words}}`.
+     - **Injection Template**: `{{summary}}`.
    - Use a styled `.variable-legend` class in `style.css` for consistent appearance.
 
 3. **Description for Word limit**

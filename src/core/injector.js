@@ -65,25 +65,9 @@ export function applyInjection() {
         return;
     }
 
-    const ctx = getContext();
-    const chat = ctx?.chat || [];
-    const lastIdx = Math.min(chatState.lastSummarisedIndex || 0, chat.length);
-    const newMessages = chat.slice(lastIdx);
-    const name1 = ctx?.name1 || 'User';
-    const name2 = ctx?.name2 || 'Character';
-    const transcript = newMessages
-        .slice(-50)
-        .map((m) => {
-            const speaker = m.name || (m.is_user ? name1 : name2);
-            return `${speaker}: ${m.mes || ''}`.trim();
-        })
-        .join('\n');
-
     const template = settings.injectTemplate || defaultSettings.injectTemplate;
     const value = template
-        .replace('{{summary}}', buildSummaryText(chatState, settings))
-        .replace('{{last_messages}}', transcript)
-        .replace('{{words}}', String(settings.summaryWords ?? defaultSettings.summaryWords));
+        .replace('{{summary}}', buildSummaryText(chatState, settings));
 
     const depth = Number(settings.injectDepth ?? 2);
     const scan = !!settings.injectScan;
