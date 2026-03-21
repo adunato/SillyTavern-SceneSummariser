@@ -5,6 +5,9 @@
 ## Step-by-Step Tasks:
 0. **Bug Fix: onBatchSummariseClick**
    - Fix `ReferenceError: ctx is not defined` in `src/ui/buttons.js`.
+0.1 **Feature: Batch Summarisation Preview**
+   - Add `previewBatchSummaries` setting.
+   - Update `onBatchSummariseClick` to show `showCombinedEditor` for each batch if enabled.
 1. **Create `src/storage/vectorHandler.js`**
    - Implement `queryVectorCollection`, `insertVectorItems`, `deleteVectorItems`, `purgeVectorCollection`.
    - Implement `getChatCollectionId()` to isolate data per chat.

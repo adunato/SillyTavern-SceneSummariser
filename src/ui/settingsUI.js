@@ -461,6 +461,7 @@ export function updateSettingsUI(container) {
     setValue('#ss_insertSceneBreak', settings.insertSceneBreak ?? defaultSettings.insertSceneBreak);
     setValue('#ss_batchSize', settings.batchSize ?? defaultSettings.batchSize);
     setValue('#ss_maxBatchSummaries', settings.maxBatchSummaries ?? defaultSettings.maxBatchSummaries);
+    setValue('#ss_previewBatchSummaries', settings.previewBatchSummaries ?? defaultSettings.previewBatchSummaries);
     setValue('#ss_keepMessagesCount', settings.keepMessagesCount ?? defaultSettings.keepMessagesCount);
     setValue('#ss_manualSummaryLimit', settings.manualSummaryLimit ?? defaultSettings.manualSummaryLimit);
     setValue('#ss_summaryContextDepth', settings.summaryContextDepth ?? defaultSettings.summaryContextDepth);

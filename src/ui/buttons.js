@@ -403,6 +403,24 @@ export async function onBatchSummariseClick() {
             logDebug('log', `LLM batch summary result ${i + 1}/${totalBatches}`, cleaned);
             logDebug('log', `Memory facts extracted: ${memories ? memories.length : 0}`);
 
+            let editedText = cleaned;
+            let approvedMemories = memories || [];
+            let editedTitle = title;
+            let editedDescription = description;
+
+            if (settings.previewBatchSummaries) {
+                const editResult = await showCombinedEditor(cleaned, memories || [], title, description);
+                if (!editResult) {
+                    logDebug('log', `User cancelled batch preview at batch ${i + 1}. Stopping batch.`);
+                    toastr.info(`Batch summarisation stopped at batch ${i + 1} by user.`);
+                    break;
+                }
+                editedText = editResult.summary;
+                approvedMemories = editResult.memories;
+                editedTitle = editResult.title;
+                editedDescription = editResult.description;
+            }
+
             // Update stored snapshot list
             const nextId = (chatState.summaryCounter ?? 0) + 1;
 
@@ -413,10 +431,10 @@ export async function onBatchSummariseClick() {
             const baseTitle = `Scene #${nextId}`;
             const snapshot = {
                 id: nextId,
-                title: title ? `${baseTitle} - ${title}` : baseTitle,
-                description: description || '',
-                text: cleaned,
-                memories: memories || [],
+                title: editedTitle ? (editedTitle.startsWith('Scene #') ? editedTitle : `${baseTitle} - ${editedTitle}`) : baseTitle,
+                description: editedDescription || '',
+                text: editedText,
+                memories: approvedMemories || [],
                 createdAt: Date.now(),
                 fromIndex: batchFromIndex,
                 toIndex: batchToIndex,

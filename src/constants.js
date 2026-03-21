@@ -20,6 +20,7 @@ export const defaultSettings = {
     insertSceneBreak: true,
     batchSize: 50,
     maxBatchSummaries: 0,
+    previewBatchSummaries: false,
     keepMessagesCount: 0,
     connectionProfileId: '',
     manualSummaryLimit: 0, // 0 = unlimited
