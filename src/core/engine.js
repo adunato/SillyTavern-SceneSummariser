@@ -99,7 +99,8 @@ export function getLatestSnapshot(chatState) {
 export function buildSummaryText(chatState, settings) {
     if (!chatState?.snapshots?.length && !chatState?.currentSemanticResults?.length) return '';
     const count = Number(settings?.summariesToInject !== undefined ? settings.summariesToInject : defaultSettings.summariesToInject);
-    const fullCount = Number(settings?.fullMemoriesToInject !== undefined ? settings.fullMemoriesToInject : 2); // default to 2
+    const fullSummaryCount = Number(settings?.fullSummariesToInject !== undefined ? settings.fullSummariesToInject : defaultSettings.fullSummariesToInject);
+    const fullMemoryCount = Number(settings?.fullMemoriesToInject !== undefined ? settings.fullMemoriesToInject : defaultSettings.fullMemoriesToInject);
     const memoryEnabled = settings?.memoryExtractionEnabled ?? defaultSettings.memoryExtractionEnabled;
     const semanticEnabled = settings?.semanticRetrievalEnabled ?? false;
 
@@ -112,19 +113,21 @@ export function buildSummaryText(chatState, settings) {
     const injectedFacts = new Set(); // To prevent duplicates in <recalled_memories>
 
     lastSnapshots.forEach((s, index) => {
-        // If fullCount is 0, all injected snapshots are full text.
-        // Otherwise, only the last 'fullCount' snapshots in the injected list are full text.
-        const isFull = fullCount === 0 || (lastSnapshots.length - index <= fullCount);
+        // Decide if summary should be full text
+        const isFullSummary = fullSummaryCount === 0 || (lastSnapshots.length - index <= fullSummaryCount);
+        
+        // Decide if memories should be full list
+        const isFullMemory = fullMemoryCount === 0 || (lastSnapshots.length - index <= fullMemoryCount);
 
         let blockText = '';
-        if (isFull) {
+        if (isFullSummary) {
             blockText = `${s.title}: ${s.text}`;
         } else {
             blockText = `${s.title}: ${s.description || 'No description available.'}`;
         }
 
         if (memoryEnabled && s.memories && s.memories.length > 0) {
-            if (isFull || !semanticEnabled) {
+            if (isFullMemory || !semanticEnabled) {
                 // If it's a recent scene OR semantic search is disabled, show all facts.
                 const memoriesList = s.memories.map(m => `- ${m}`).join('\n');
                 blockText += `\nMemories:\n${memoriesList}`;

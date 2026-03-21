@@ -52,6 +52,9 @@ export async function handleSemanticRetrieval() {
         // Re-run applyInjection so buildSummaryText can consume these results
         applyInjection();
 
+        // Clear transient results so they don't leak into subsequent non-semantic renders
+        delete chatState.currentSemanticResults;
+
     } catch (err) {
         console.error(`[${extensionName}] Semantic Retrieval Failed:`, err);
     }

@@ -488,6 +488,9 @@ export function updateSettingsUI(container) {
     const summariesToInjectDisplay = container.querySelector('#ss_summariesToInject_value');
     if (summariesToInjectDisplay) summariesToInjectDisplay.textContent = settings.summariesToInject ?? defaultSettings.summariesToInject;
 
+    const fullSummariesToInjectDisplay = container.querySelector('#ss_fullSummariesToInject_value');
+    if (fullSummariesToInjectDisplay) fullSummariesToInjectDisplay.textContent = settings.fullSummariesToInject ?? defaultSettings.fullSummariesToInject;
+
     const summaryContextDepthDisplay = container.querySelector('#ss_summaryContextDepth_value');
     if (summaryContextDepthDisplay) summaryContextDepthDisplay.textContent = settings.summaryContextDepth ?? defaultSettings.summaryContextDepth;
 

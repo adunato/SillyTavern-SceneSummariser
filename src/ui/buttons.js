@@ -313,6 +313,7 @@ export async function onBatchSummariseClick() {
     // Clear Data Bank file at start of batch
     await persistMemoriesForChat(chatState);
 
+    const ctx = getContext();
     const fullChat = ctx?.chat || [];
 
     // Strip old markers from fullChat to reset the state physically

@@ -3,6 +3,8 @@
 - Existing `SillyTavern` backend must be running to handle `/api/vector/*` requests.
 
 ## Step-by-Step Tasks:
+0. **Bug Fix: onBatchSummariseClick**
+   - Fix `ReferenceError: ctx is not defined` in `src/ui/buttons.js`.
 1. **Create `src/storage/vectorHandler.js`**
    - Implement `queryVectorCollection`, `insertVectorItems`, `deleteVectorItems`, `purgeVectorCollection`.
    - Implement `getChatCollectionId()` to isolate data per chat.

@@ -199,6 +199,15 @@
 
                 <div class="range-wrapper">
                     <div class="range-header">
+                        <span>Retain full summaries</span>
+                        <span class="range-value" id="ss_fullSummariesToInject_value">0</span>
+                    </div>
+                    <input type="range" id="ss_fullSummariesToInject" name="fullSummariesToInject" class="ss-setting-input" min="0" max="50" step="1">
+                    <span class="help-text">Number of recent snapshots to inject as full text. Older injected snapshots will only show their title and description. 0 = all full.</span>
+                </div>
+
+                <div class="range-wrapper">
+                    <div class="range-header">
                         <span>Keep Messages Count</span>
                         <span class="range-value" id="ss_keepMessagesCount_value">5</span>
                     </div>
