@@ -7,11 +7,23 @@ import { getChatState, ensureSettings } from '../state/stateManager.js';
 import { buildSummaryText } from './engine.js';
 import { queryVectorCollection, getChatCollectionId } from '../storage/vectorHandler.js';
 
+let lastRetrievalTime = 0;
+const RETRIEVAL_COOLDOWN = 2000; 
+
 export function scrubVectorStoragePrompt() {
-    // Legacy Data Bank cleanup function, replaced by full semantic retrieval
 }
 
-export async function handleSemanticRetrieval() {
+/**
+ * Performs semantic search and updates the transient state for building the summary prompt.
+ */
+export async function handleSemanticRetrieval(providedChat = null) {
+    const now = Date.now();
+    // Only cooldown if it's an automatic event-based call (no providedChat)
+    if (!providedChat && (now - lastRetrievalTime < RETRIEVAL_COOLDOWN)) {
+        return;
+    }
+    lastRetrievalTime = now;
+
     ensureSettings();
     const settings = extension_settings[settingsKey];
     if (!settings?.semanticRetrievalEnabled || !settings.enabled) {
@@ -20,47 +32,41 @@ export async function handleSemanticRetrieval() {
     }
 
     const chatState = getChatState();
-    const ctx = getContext();
-    const chat = ctx?.chat || [];
+    const chat = providedChat || getContext()?.chat || [];
     
-    // Build query from recent messages
     const queryDepth = Number(settings.semanticSearchDepth || 5);
     const recentMessages = chat.slice(-queryDepth).filter(m => !m.is_system).map(m => m.mes).join('\n');
     
+    console.log(`[${extensionName}] [handleSemanticRetrieval] Running search (Depth: ${queryDepth})`);
+
     if (!recentMessages.trim()) return;
 
-    const topK = Number(settings.semanticTopK || 5);
-    const threshold = Number(settings.semanticThreshold || 0.5);
+    const topK = Number(settings.semanticTopK !== undefined ? settings.semanticTopK : 5);
+    const threshold = Number(settings.semanticThreshold || 0.1);
     const collectionId = getChatCollectionId();
 
     try {
         const results = await queryVectorCollection(collectionId, recentMessages, topK, threshold);
         
         if (!results || results.length === 0) {
-            setExtensionPrompt('ss_vector_memories', '', extension_prompt_types.IN_PROMPT, 0, false, extension_prompt_roles.SYSTEM);
-            return;
+            console.log(`[${extensionName}] [handleSemanticRetrieval] 0 matches found.`);
+            chatState.currentSemanticResults = [];
+        } else {
+            console.log(`[${extensionName}] [handleSemanticRetrieval] Found ${results.length} relevant memories.`);
+            chatState.currentSemanticResults = results;
         }
-
-        // Deduplicate against memories that will ALREADY be injected via the scene blocks.
-        // buildSummaryText handles adding full memories for recent scenes, and semantic memories for older ones.
-        // Here, we just need to pass the query results to the chatState temporarily, so buildSummaryText can use them,
-        // AND we gather any "leftover" very old memories to inject as a standalone block.
-
-        // Actually, the easiest way to share state with the synchronous buildSummaryText is to attach it to chatState transiently.
-        chatState.currentSemanticResults = results.map(r => r.text);
         
-        // Re-run applyInjection so buildSummaryText can consume these results
         applyInjection();
 
     } catch (err) {
-        console.error(`[${extensionName}] Semantic Retrieval Failed:`, err);
+        console.error(`[${extensionName}] [handleSemanticRetrieval] Failed:`, err);
     }
 }
 
 export function updateInjectionVisibility(container) {
     if (!container) return;
     const settings = extension_settings[settingsKey];
-    const isInChat = String(settings.injectPosition) === '1'; // IN_CHAT
+    const isInChat = String(settings.injectPosition) === '1'; 
 
     const depthInput = container.querySelector('#ss_injectDepth');
     const roleSelect = container.querySelector('#ss_injectRole');
@@ -80,33 +86,16 @@ export function updateInjectionVisibility(container) {
 }
 
 export function updateContextControlVisibility(container) {
-    if (!container) return;
-    const settings = extension_settings[settingsKey];
-    // limitToUnsummarised controls whether we are trimming at all.
-    // trimAfterSceneBreak is a refinement of HOW we trim.
-    // However, trimAfterSceneBreak creates a visual marker which is also controlled by insertSceneBreak.
-
-    // Logic: 
-    // If limitToUnsummarised is OFF, then trimAfterSceneBreak does nothing relevant to the prompt (though it might still run logic).
-    // Let's visualy imply dependency: trimAfterSceneBreak is only relevant if limitToUnsummarised is ON.
-
-    const limitCheckbox = container.querySelector('#ss_limitToUnsummarised');
-    // trimAfterSceneBreak removed as per user request (strict filtering enforced)
 }
 
 export function applyInjection() {
     const settings = extension_settings[settingsKey];
     const chatState = getChatState();
     
-    logDebug('log', `[applyInjection] Triggered. enabled=${settings?.enabled}, injectEnabled=${settings?.injectEnabled}`);
-    
     if (!settings || !settings.injectEnabled || !settings.enabled) {
         try {
             setExtensionPrompt(extensionName, '', extension_prompt_types.IN_PROMPT, 0, false, extension_prompt_roles.SYSTEM);
-            logDebug('log', '[applyInjection] Cleared injection because extension or injection is disabled.');
-        } catch (err) {
-            console.error(`[${extensionName}] Failed to clear injection:`, err);
-        }
+        } catch (err) {}
         return;
     }
 
@@ -114,18 +103,12 @@ export function applyInjection() {
     if (position === extension_prompt_types.NONE) {
         try {
             setExtensionPrompt(extensionName, '', extension_prompt_types.IN_PROMPT, 0, false, extension_prompt_roles.SYSTEM);
-            logDebug('log', '[applyInjection] Cleared injection because position is NONE.');
-        } catch (err) {
-            console.error(`[${extensionName}] Failed to clear injection (NONE):`, err);
-        }
+        } catch (err) {}
         return;
     }
 
     const template = settings.injectTemplate || defaultSettings.injectTemplate;
     const summaryText = buildSummaryText(chatState, settings);
-    
-    logDebug('log', `[applyInjection] Template used: "${template}"`);
-    logDebug('log', `[applyInjection] Generated summaryText length: ${summaryText ? summaryText.length : 0}`);
     
     const value = template
         .replace(/\{\{summary\}\}/ig, summaryText);
@@ -136,11 +119,8 @@ export function applyInjection() {
 
     try {
         setExtensionPrompt(extensionName, value, position, depth, scan, role);
-        const valuePreview = value ? (value.substring(0, 100).replace(/\n/g, ' ') + '...') : '[empty]';
-        logDebug('log', `[applyInjection] Injection successful (pos=${position}, depth=${depth}, scan=${scan}, role=${role}). Value preview: ${valuePreview}`);
     } catch (err) {
         console.error(`[${extensionName}] Failed to set injection prompt:`, err);
-        logDebug('error', 'Failed to set injection prompt', err?.message || err);
     }
 }
 
@@ -180,99 +160,57 @@ export async function insertSceneBreakMarker(snapshotId) {
 
     chatState.sceneBreakMarkerId = markerId;
     chatState.sceneBreakMesId = messageId;
-    logDebug('log', 'Inserted scene break marker', markerId, messageId, snapshotId);
 }
 
 /**
  * Context interceptor for filtering messages
- * @param {object[]} chat The chat array to filter
- * @param {number} maxContext The maximum context size (unused here but passed by ST)
- * @param {function} abort Function to abort generation
- * @param {string} type Generation type ('chat', 'text', 'quiet', etc)
  */
 export async function filterContextInterceptor(chat, maxContext, abort, type) {
-    if (type === 'quiet') return; // Don't interfere with internal quiet prompts
+    if (type === 'quiet') return;
 
     ensureSettings();
     const settings = extension_settings[settingsKey];
-    const chatState = getChatState();
     
-    // Quick debug of what is about to be injected
-    const currentSummary = buildSummaryText(chatState, settings);
-    logDebug('log', `[filterContextInterceptor] Triggered. type=${type}, maxContext=${maxContext}. Injection summary length: ${currentSummary ? currentSummary.length : 0}`);
-
-    logDebug('log', `[filterContextInterceptor] limitToUnsummarised=${settings?.limitToUnsummarised}`);
-
-    if (!settings?.limitToUnsummarised) {
-        logDebug('log', '[filterContextInterceptor] limitToUnsummarised is disabled. Bailing out.');
-        return;
+    if (settings?.enabled && settings?.semanticRetrievalEnabled) {
+        await handleSemanticRetrieval(chat);
     }
 
-    // Optional: Log the very last message just to see what kind of objects we're receiving
-    if (chat.length > 0) {
-        logDebug('log', `[filterContextInterceptor] Sample chat message keys: ${Object.keys(chat[chat.length - 1]).join(', ')}`);
-        const sampleMes = chat[chat.length - 1].mes || '';
-        logDebug('log', `[filterContextInterceptor] Sample chat message mes start: ${sampleMes.substring(0, 30)}...`);
-    }
+    if (!settings?.limitToUnsummarised) return;
 
     const ctx = getContext();
     const fullChat = ctx?.chat || [];
     let markerIndexFull = -1;
-    let foundType = 'none';
 
-    // 1. SillyTavern filters out is_system messages from the chat array passed to generate_interceptor.
-    // Therefore, the marker will never be in `chat`. We scan BACKWARDS in `fullChat`.
     for (let i = fullChat.length - 1; i >= 0; i--) {
         const m = fullChat[i];
-
-        // 1. Check Metadata (Robust)
-        const isMetadataMarker = m?.extra?.scene_summariser_marker;
-        if (isMetadataMarker) {
+        if (m?.extra?.scene_summariser_marker) {
             markerIndexFull = i;
-            foundType = 'metadata';
-            logDebug('log', `[filterContextInterceptor] Found cutoff marker via Metadata at fullChat index ${i}`);
             break;
         }
-
-        // 2. Check Content (Fallback)
         const content = m?.mes || '';
-        if (content.includes('scene-summary-break') || content.includes('Scene Summary Boundary') || content.includes('data-marker-id="scene-break')) {
+        if (content.includes('scene-summary-break')) {
             markerIndexFull = i;
-            foundType = 'content';
-            logDebug('log', `[filterContextInterceptor] Found cutoff marker via Content fallback at fullChat index ${i}`);
             break;
         }
     }
 
     if (markerIndexFull !== -1) {
-        // 2. Map the marker index in `fullChat` to the generated subset `chat`.
-        // We know `chat` is a strict filtered subsequence of `fullChat` containing non-system messages.
         let chatPtr = 0;
         for (let i = 0; i <= markerIndexFull; i++) {
             const fMsg = fullChat[i];
             const cMsg = chat[chatPtr];
             if (!cMsg) break;
-
-            // Check if fMsg structurally matches cMsg.
-            // SillyTavern guarantees preserved send_date, name, and is_user in the copied array.
             const isMatch = fMsg.send_date === cMsg.send_date &&
                 !!fMsg.is_user === !!cMsg.is_user &&
                 !!fMsg.is_system === !!cMsg.is_system &&
                 fMsg.name === cMsg.name;
-
-            if (isMatch) {
-                chatPtr++;
-            }
+            if (isMatch) chatPtr++;
         }
 
         const keepCount = Number(settings?.keepMessagesCount || 0);
         const removedItemsCount = Math.max(0, chatPtr - keepCount);
-        logDebug('log', `[filterContextInterceptor] Filtering request. Marker type=${foundType} at fullChat index ${markerIndexFull}. Removing ${removedItemsCount} matched messages from coreChat (retaining ${keepCount}).`);
         if (removedItemsCount > 0) {
             chat.splice(0, removedItemsCount);
         }
-        logDebug('log', `[filterContextInterceptor] Final chat array length after splicing: ${chat.length}`);
-    } else {
-        logDebug('log', '[filterContextInterceptor] Limit enabled but neither metadata nor content marker found in fullChat. Sending full context.');
     }
 }

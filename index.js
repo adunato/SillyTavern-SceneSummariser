@@ -18,7 +18,19 @@ jQuery(async () => {
     startButtonMount();
     try {
         eventSource?.on(event_types.CHAT_CHANGED, onChatChanged);
-        eventSource?.on(event_types.GENERATE_BEFORE_COMBINE_PROMPTS, handleSemanticRetrieval);
+        
+        // Main hook for semantic retrieval
+        eventSource?.on(event_types.GENERATE_BEFORE_COMBINE_PROMPTS, async () => {
+            console.log(`[${extensionName}] GENERATE_BEFORE_COMBINE_PROMPTS event detected.`);
+            await handleSemanticRetrieval();
+        });
+
+        // Backup hook for modded versions or different flows
+        eventSource?.on(event_types.GENERATION_STARTED, async () => {
+            console.log(`[${extensionName}] GENERATION_STARTED event detected.`);
+            await handleSemanticRetrieval();
+        });
+
         logDebug('log', 'Registered prompt filter listeners (migrated to generate_interceptor)');
     } catch (err) {
         console.error(`[${extensionName}] Failed to register event listeners:`, err);
@@ -27,4 +39,3 @@ jQuery(async () => {
 
 // Expose the interceptor globally matching the name in manifest.json
 window['SceneSummariser_filterContextInterceptor'] = filterContextInterceptor;
-

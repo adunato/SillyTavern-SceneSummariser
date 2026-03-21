@@ -14,19 +14,15 @@ export function parseExtractionResponse(raw) {
     let title = titleMatch ? titleMatch[1].trim() : '';
     let description = descMatch ? descMatch[1].trim() : '';
     
-    // 1. Remove any <memory>, <title>, or <description> blocks (including content) that might be inside the summaryText
     summaryText = summaryText.replace(/<memor(?:y|ies)>[\s\S]*?<\/memor(?:y|ies)>/gi, '').trim();
     summaryText = summaryText.replace(/<title>[\s\S]*?<\/title>/gi, '').trim();
     summaryText = summaryText.replace(/<description>[\s\S]*?<\/description>/gi, '').trim();
-    
-    // 2. Strip any residual or malformed tags (just the tags, keep content)
     summaryText = summaryText.replace(/<\/?summary>/gi, '').trim();
     summaryText = summaryText.replace(/<\/?memor(?:y|ies)>/gi, '').trim();
     summaryText = summaryText.replace(/<\/?title>/gi, '').trim();
     summaryText = summaryText.replace(/<\/?description>/gi, '').trim();
     
     const memories = [];
-
     if (memoryMatch) {
         const lines = memoryMatch[1].split('\n').map(l => l.trim()).filter(l => l);
         if (!lines.some(l => l === 'NO_NEW_MEMORIES')) {
@@ -38,23 +34,11 @@ export function parseExtractionResponse(raw) {
             }
         }
     }
-    
     return { summaryText, memories, title, description };
 }
 
-/**
- * Builds the LLM prompt for the current summarisation pass.
- * When memoryExtractionEnabled is true, uses memoryPrompt (combined template).
- * When false, falls back to summaryPrompt (legacy behaviour).
- * @param {string} transcript Chat transcript text.
- * @param {object} settings Extension settings.
- * @param {string} previousSummaryText Concatenated previous snapshot texts.
- * @param {object} [chatState={}] The current chat state to extract existing memories.
- * @returns {string}
- */
 export function buildExtractionPrompt(transcript, settings, previousSummaryText, chatState = {}) {
     const ctx = getContext();
-    
     let charNames = ctx?.name2 || 'Character';
     if (ctx?.groupId && Array.isArray(ctx?.groups) && Array.isArray(ctx?.characters)) {
         const group = ctx.groups.find(g => g.id === ctx.groupId);
@@ -63,31 +47,20 @@ export function buildExtractionPrompt(transcript, settings, previousSummaryText,
                 const char = ctx.characters.find(c => c.avatar === avatar);
                 return char ? char.name : null;
             }).filter(Boolean);
-            if (memberNames.length > 0) {
-                charNames = memberNames.join(', ');
-            }
+            if (memberNames.length > 0) charNames = memberNames.join(', ');
         }
     }
-
     const words = settings.summaryWords || defaultSettings.summaryWords;
     const enabled = settings.memoryExtractionEnabled ?? defaultSettings.memoryExtractionEnabled;
-    const template = enabled
-        ? (settings.memoryPrompt || defaultSettings.memoryPrompt)
-        : (settings.summaryPrompt || defaultSettings.summaryPrompt);
-
-    // Extract memories from all snapshots and flatten them
+    const template = enabled ? (settings.memoryPrompt || defaultSettings.memoryPrompt) : (settings.summaryPrompt || defaultSettings.summaryPrompt);
     const allMemories = (chatState.snapshots || []).flatMap(s => s.memories || []);
-    
-    const existingMemories = allMemories.length > 0
-        ? allMemories.map(m => `- ${m}`).join('\n')
-        : 'None';
-
+    const existingMemories = allMemories.length > 0 ? allMemories.map(m => `- ${m}`).join('\n') : 'None';
     return template
         .replace(/\{\{words\}\}/g, words)
         .replace(/\{\{summary\}\}/g, previousSummaryText || '')
         .replace(/\{\{last_messages\}\}/g, transcript || '(no messages)')
         .replace(/\{\{charNames\}\}/g, charNames)
-        .replace(/\{\{charName\}\}/g, charNames) // fallback for older prompts
+        .replace(/\{\{charName\}\}/g, charNames)
         .replace(/\{\{existingMemories\}\}/g, existingMemories);
 }
 
@@ -99,82 +72,69 @@ export function getLatestSnapshot(chatState) {
 export function buildSummaryText(chatState, settings) {
     if (!chatState?.snapshots?.length && !chatState?.currentSemanticResults?.length) return '';
     const count = Number(settings?.summariesToInject !== undefined ? settings.summariesToInject : defaultSettings.summariesToInject);
-    const fullCount = Number(settings?.fullMemoriesToInject !== undefined ? settings.fullMemoriesToInject : 2); // default to 2
+    const fullSummaryCount = Number(settings?.fullSummariesToInject !== undefined ? settings.fullSummariesToInject : defaultSettings.fullSummariesToInject);
+    const fullMemoryCount = Number(settings?.fullMemoriesToInject !== undefined ? settings.fullMemoriesToInject : defaultSettings.fullMemoriesToInject);
     const memoryEnabled = settings?.memoryExtractionEnabled ?? defaultSettings.memoryExtractionEnabled;
     const semanticEnabled = settings?.semanticRetrievalEnabled ?? false;
 
     let lastSnapshots = chatState.snapshots || [];
-    if (count > 0) {
-        lastSnapshots = lastSnapshots.slice(-count);
-    }
+    if (count > 0) lastSnapshots = lastSnapshots.slice(-count);
 
     const injectedBlocks = [];
-    const injectedFacts = new Set(); // To prevent duplicates in <recalled_memories>
+    const injectedFacts = new Set(); 
 
     lastSnapshots.forEach((s, index) => {
-        // If fullCount is 0, all injected snapshots are full text.
-        // Otherwise, only the last 'fullCount' snapshots in the injected list are full text.
-        const isFull = fullCount === 0 || (lastSnapshots.length - index <= fullCount);
+        const isFullSummary = fullSummaryCount === 0 || (lastSnapshots.length - index <= fullSummaryCount);
+        const isFullMemory = fullMemoryCount === 0 || (lastSnapshots.length - index <= fullMemoryCount);
 
-        let blockText = '';
-        if (isFull) {
-            blockText = `${s.title}: ${s.text}`;
-        } else {
-            blockText = `${s.title}: ${s.description || 'No description available.'}`;
-        }
+        let blockText = isFullSummary ? `${s.title}: ${s.text}` : `${s.title}: ${s.description || 'No description available.'}`;
 
         if (memoryEnabled && s.memories && s.memories.length > 0) {
-            if (isFull || !semanticEnabled) {
-                // If it's a recent scene OR semantic search is disabled, show all facts.
+            if (isFullMemory || !semanticEnabled) {
                 const memoriesList = s.memories.map(m => `- ${m}`).join('\n');
                 blockText += `\nMemories:\n${memoriesList}`;
-                s.memories.forEach(m => injectedFacts.add(m)); // Track injected facts
+                s.memories.forEach(m => injectedFacts.add(m));
             } else {
-                // It's an older scene AND semantic search is enabled.
-                // Only inject facts that the semantic search returned for THIS scene.
                 const relevantFacts = [];
                 if (chatState.currentSemanticResults) {
-                    chatState.currentSemanticResults.forEach(resText => {
-                        // Assuming vector text is formatted as `${snapshot.title}:\n- ${memText}`
-                        if (resText.startsWith(`${s.title}:\n- `)) {
-                            const fact = resText.substring(s.title.length + 3).trim();
+                    chatState.currentSemanticResults.forEach(res => {
+                        const resMetadata = res.metadata || {};
+                        const resText = res.text || '';
+                        let isMatch = false;
+                        if (resMetadata.snapshotId !== undefined) {
+                            isMatch = Number(resMetadata.snapshotId) === s.id;
+                        } else {
+                            isMatch = resText.startsWith(`${s.title}:\n- `);
+                        }
+                        if (isMatch) {
+                            const fact = resMetadata.fact || resText.substring(resText.indexOf('\n- ') + 3).trim();
                             relevantFacts.push(fact);
                             injectedFacts.add(fact);
                         }
                     });
                 }
-                
                 if (relevantFacts.length > 0) {
-                    const memoriesList = relevantFacts.map(m => `- ${m}`).join('\n');
-                    blockText += `\nRelevant Memories:\n${memoriesList}`;
+                    blockText += `\nRelevant Memories:\n${relevantFacts.map(m => `- ${m}`).join('\n')}`;
                 }
             }
         }
-
         injectedBlocks.push(blockText);
     });
 
-    // Handle very old semantic memories (ones that weren't caught by the recent scene loop)
     if (semanticEnabled && memoryEnabled && chatState.currentSemanticResults) {
         const standaloneFacts = [];
-        chatState.currentSemanticResults.forEach(resText => {
-            // Parse out the title and fact
-            const match = resText.match(/^(.*?):\n- (.*)$/);
-            if (match) {
-                const title = match[1];
-                const fact = match[2];
-                if (!injectedFacts.has(fact)) {
-                    standaloneFacts.push(`[${title}] ${fact}`);
-                }
+        chatState.currentSemanticResults.forEach(res => {
+            const resMetadata = res.metadata || {};
+            const resText = res.text || '';
+            const fact = resMetadata.fact || resText.substring(resText.indexOf('\n- ') + 3).trim();
+            if (!injectedFacts.has(fact)) {
+                const title = resMetadata.title || resText.split(':')[0] || 'Memory';
+                standaloneFacts.push(`[${title}] ${fact}`);
             }
         });
-
         if (standaloneFacts.length > 0) {
-            const standaloneBlock = `<recalled_memories>\n${standaloneFacts.join('\n')}\n</recalled_memories>`;
-            // Inject the recalled memories block at the top
-            injectedBlocks.unshift(standaloneBlock);
+            injectedBlocks.unshift(`<recalled_memories>\n${standaloneFacts.join('\n')}\n</recalled_memories>`);
         }
     }
-
     return injectedBlocks.join('\n\n');
 }

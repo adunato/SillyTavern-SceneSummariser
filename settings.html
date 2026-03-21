@@ -142,6 +142,16 @@
                     <span class="help-text">Limits memory/tokens per run by keeping only the most recent N batches (0 for infinite).</span>
                 </div>
 
+                <div class="control-group">
+                    <label class="switch-container">
+                        <div class="switch">
+                            <input type="checkbox" id="ss_previewBatchSummaries" name="previewBatchSummaries" class="ss-setting-input">
+                            <span class="slider"></span>
+                        </div>
+                        <span class="switch-label-text">Preview summary during batch summarisation</span>
+                    </label>
+                </div>
+
                 <div class="range-wrapper">
                     <div class="range-header">
                         <span>Manual Summarisation Prompt Limit (Messages)</span>
@@ -195,6 +205,15 @@
                     </div>
                     <input type="range" id="ss_summariesToInject" name="summariesToInject" class="ss-setting-input" min="0" max="50" step="1">
                     <span class="help-text">Number of recent snapshots to inject into the active chat prompt (1 = latest only, 0 = all).</span>
+                </div>
+
+                <div class="range-wrapper">
+                    <div class="range-header">
+                        <span>Retain full summaries</span>
+                        <span class="range-value" id="ss_fullSummariesToInject_value">0</span>
+                    </div>
+                    <input type="range" id="ss_fullSummariesToInject" name="fullSummariesToInject" class="ss-setting-input" min="0" max="50" step="1">
+                    <span class="help-text">Number of recent snapshots to inject as full text. Older injected snapshots will only show their title and description. 0 = all full.</span>
                 </div>
 
                 <div class="range-wrapper">
@@ -297,7 +316,8 @@
                         <span>Max Retrieved Memories (Top K)</span>
                         <span class="range-value" id="ss_semanticTopK_value">5</span>
                     </div>
-                    <input type="range" id="ss_semanticTopK" name="semanticTopK" class="ss-setting-input" min="1" max="20" step="1">
+                    <input type="range" id="ss_semanticTopK" name="semanticTopK" class="ss-setting-input" min="0" max="50" step="1">
+                    <span class="help-text">Max number of memories to retrieve (0 = unlimited, filtered only by threshold).</span>
                 </div>
 
                 <div class="range-wrapper">
