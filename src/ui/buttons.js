@@ -132,7 +132,7 @@ export async function onSummariseClick() {
     const settings = extension_settings[settingsKey];
     const chatState = getChatState();
 
-    const historyDepth = Number(settings.summaryHistoryDepth || defaultSettings.summaryHistoryDepth);
+    const historyDepth = Number(settings.summaryContextDepth || defaultSettings.summaryContextDepth);
     let previousSnapshots = chatState.snapshots || [];
     if (historyDepth > 0 && previousSnapshots.length > historyDepth) {
         previousSnapshots = previousSnapshots.slice(-historyDepth);
@@ -371,7 +371,7 @@ export async function onBatchSummariseClick() {
             button.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Batch ${i + 1} of ${totalBatches}...`;
         }
 
-        const historyDepth = Number(settings.summaryHistoryDepth || defaultSettings.summaryHistoryDepth);
+        const historyDepth = Number(settings.summaryContextDepth || defaultSettings.summaryContextDepth);
         let previousSnapshots = chatState.snapshots || [];
         if (historyDepth > 0 && previousSnapshots.length > historyDepth) {
             previousSnapshots = previousSnapshots.slice(-historyDepth);

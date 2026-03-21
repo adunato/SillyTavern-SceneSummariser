@@ -98,14 +98,16 @@ export function getLatestSnapshot(chatState) {
 
 export function buildSummaryText(chatState, settings) {
     if (!chatState?.snapshots?.length) return '';
-    if (settings?.storeHistory) {
-        const max = settings.maxSummaries !== undefined ? settings.maxSummaries : defaultSettings.maxSummaries;
-        let lastSnapshots = chatState.snapshots;
-        if (max > 0) {
-            lastSnapshots = chatState.snapshots.slice(-max);
-        }
-        return lastSnapshots.map(s => `${s.title}: ${s.text}`).join('\n');
+    const count = settings?.summariesToInject !== undefined ? settings.summariesToInject : defaultSettings.summariesToInject;
+    
+    if (count === 1) {
+        const latest = getLatestSnapshot(chatState);
+        return latest ? `${latest.title}: ${latest.text}` : '';
     }
-    const latest = getLatestSnapshot(chatState);
-    return latest ? `${latest.title}: ${latest.text}` : '';
+
+    let lastSnapshots = chatState.snapshots;
+    if (count > 0) {
+        lastSnapshots = chatState.snapshots.slice(-count);
+    }
+    return lastSnapshots.map(s => `${s.title}: ${s.text}`).join('\n');
 }

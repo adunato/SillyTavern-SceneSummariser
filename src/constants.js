@@ -7,8 +7,7 @@ export const defaultSettings = {
     summaryPrompt: 'Ignore previous instructions. Summarize the most important facts and events in the story so far. If a summary already exists in your memory, use that as a base and expand with new facts. Limit the summary to {{words}} words or less. Your response must include exactly three components:\n\n1. A single <title> block containing a brief title for the scene.\n2. A single <description> block containing a short description of the scene.\n3. A single <summary> block containing the plot summary.',
     consolidationPrompt: 'Create a single, cohesive summary by merging the following scene summaries. Remove redundant information and ensure the narrative flows logically. Limit the final summary to {{words}} words or less. Your response must include exactly three components:\n\n1. A single <title> block containing a brief title for the consolidated scene.\n2. A single <description> block containing a short description of the consolidated scene.\n3. A single <summary> block containing the merged plot summary.',
     summaryWords: 200,
-    storeHistory: true,
-    maxSummaries: 5,
+    summariesToInject: 5, // Replaces storeHistory (bool) and maxSummaries (int)
     debugMode: false,
     injectEnabled: true,
     injectPosition: 0, // In Prompt
@@ -23,7 +22,7 @@ export const defaultSettings = {
     keepMessagesCount: 0,
     connectionProfileId: '',
     manualSummaryLimit: 0, // 0 = unlimited
-    summaryHistoryDepth: 0, // 0 = all
+    summaryContextDepth: 0, // Replaces summaryHistoryDepth. 0 = all
     // Memory extraction (§2)
     memoryExtractionEnabled: true,
     memoryPrompt: `You are an assistant tasked with updating a story's progression by summarizing recent events and extracting significant long-term character memories.

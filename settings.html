@@ -25,6 +25,7 @@
         </div>
 
         <div id="settings" class="tab-content active ss-panel">
+            <!-- SECTION 1: GENERAL & GENERATION -->
             <div class="section">
                 <div class="section-header-row">
                     <h3 class="section-title">General & Generation</h3>
@@ -57,6 +58,7 @@
                 </div>
             </div>
 
+            <!-- SECTION 2: MEMORY EXTRACTION -->
             <div class="section">
                 <div class="section-header-row">
                     <h3 class="section-title">Memory Extraction</h3>
@@ -75,7 +77,7 @@
                         <span>Extraction Prompt (Combined)</span>
                         <button id="ss_reset_memoryPrompt" class="icon-btn" title="Reset to default prompt" style="padding: 0;"><i class="fa-solid fa-arrow-rotate-left"></i></button>
                     </label>
-                    <textarea id="ss_memoryPrompt" name="ss_memoryPrompt" class="ss-setting-input" rows="4"></textarea>
+                    <textarea id="ss_memoryPrompt" name="memoryPrompt" class="ss-setting-input" rows="4"></textarea>
                     <div class="variable-legend">
                         Available: <code>{{words}}</code>, <code>{{summary}}</code>, <code>{{last_messages}}</code>, <code>{{charNames}}</code>, <code>{{existingMemories}}</code>
                     </div>
@@ -88,9 +90,10 @@
                 </div>
             </div>
 
+            <!-- SECTION 3: SUMMARISATION CONTROL -->
             <div class="section">
                 <div class="section-header-row">
-                    <h3 class="section-title">Advanced Control</h3>
+                    <h3 class="section-title">Summarisation Control</h3>
                 </div>
                 <div class="range-wrapper">
                     <div class="range-header">
@@ -101,30 +104,13 @@
                     <span class="help-text">Controls the <code>{{words}}</code> variable used in prompt templates to guide the LLM's output length.</span>
                 </div>
 
-                <div class="control-group">
-                    <label class="switch-container">
-                        <div class="switch">
-                            <input type="checkbox" id="ss_storeHistory" name="storeHistory" class="ss-setting-input">
-                            <span class="slider"></span>
-                        </div>
-                        <span class="switch-label-text">Store History</span>
-                    </label>
-                    <span class="help-text">If enabled, all stored summaries will be injected. If disabled, only the latest summary is injected.</span>
-                </div>
-
                 <div class="range-wrapper">
                     <div class="range-header">
-                        <span>Summary History Depth</span>
-                        <span class="range-value" id="ss_summaryHistoryDepth_value">0</span>
+                        <span>Previous Summaries Context</span>
+                        <span class="range-value" id="ss_summaryContextDepth_value">0</span>
                     </div>
-                    <input type="range" id="ss_summaryHistoryDepth" name="summaryHistoryDepth" class="ss-setting-input" min="0" max="20" step="1">
+                    <input type="range" id="ss_summaryContextDepth" name="summaryContextDepth" class="ss-setting-input" min="0" max="20" step="1">
                     <span class="help-text">Number of previous snapshots to include as context for the LLM when generating a new scene summary. 0 = All.</span>
-                </div>
-
-                <div class="control-group">
-                    <label class="block-label">Max Snapshots History</label>
-                    <input type="number" id="ss_maxSummaries" name="maxSummaries" class="ss-setting-input" min="0" max="50">
-                    <span class="help-text">Number of recent snapshots to inject into the prompt (0 for all).</span>
                 </div>
 
                 <div class="range-wrapper" style="margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border-color);">
@@ -144,19 +130,14 @@
                     <input type="range" id="ss_maxBatchSummaries" name="maxBatchSummaries" class="ss-setting-input" min="0" max="50" step="1">
                     <span class="help-text">Limits memory/tokens per run by keeping only the most recent N batches (0 for infinite).</span>
                 </div>
-            </div>
 
-            <div class="section">
-                <div class="section-header-row">
-                    <h3 class="section-title">Context Control</h3>
-                </div>
                 <div class="range-wrapper">
                     <div class="range-header">
-                        <span>Keep Messages Count</span>
-                        <span class="range-value" id="ss_keepMessagesCount_value">5</span>
+                        <span>Manual Summarisation Prompt Limit (Messages)</span>
+                        <span class="range-value" id="ss_manualSummaryLimit_value">0</span>
                     </div>
-                    <input type="range" id="ss_keepMessagesCount" name="keepMessagesCount" class="ss-setting-input" min="0" max="20" step="1">
-                    <span class="help-text">Number of recent messages prior to the summary marker to retain in the prompt.</span>
+                    <input type="range" id="ss_manualSummaryLimit" name="manualSummaryLimit" class="ss-setting-input" min="0" max="250" step="10">
+                    <span class="help-text">How many unsummarised messages at most should be sent to the LLM. 0 = Send all of them since the last summary.</span>
                 </div>
 
                 <div class="control-group">
@@ -178,21 +159,42 @@
                         <span class="switch-label-text">Insert visual scene break marker</span>
                     </label>
                 </div>
+            </div>
+
+            <!-- SECTION 4: CHAT INJECTION CONTROL -->
+            <div class="section">
+                <div class="section-header-row">
+                    <h3 class="section-title">Chat Injection Control</h3>
+                </div>
+                
+                <div class="control-group">
+                    <label class="switch-container">
+                        <div class="switch">
+                            <input type="checkbox" id="ss_injectEnabled" name="injectEnabled" class="ss-setting-input">
+                            <span class="slider"></span>
+                        </div>
+                        <span class="switch-label-text">Enable Injection</span>
+                    </label>
+                </div>
 
                 <div class="range-wrapper">
                     <div class="range-header">
-                        <span>Manual Summarisation Prompt Limit (Messages)</span>
-                        <span class="range-value" id="ss_manualSummaryLimit_value">0</span>
+                        <span>Summaries to Inject in Chat</span>
+                        <span class="range-value" id="ss_summariesToInject_value">5</span>
                     </div>
-                    <input type="range" id="ss_manualSummaryLimit" name="manualSummaryLimit" class="ss-setting-input" min="0" max="250" step="10">
-                    <span class="help-text">How many unsummarised messages at most should be sent to the LLM. 0 = Send all of them since the last summary.</span>
+                    <input type="range" id="ss_summariesToInject" name="summariesToInject" class="ss-setting-input" min="0" max="50" step="1">
+                    <span class="help-text">Number of recent snapshots to inject into the active chat prompt (1 = latest only, 0 = all).</span>
                 </div>
-            </div>
-            
-            <div class="section">
-                <div class="section-header-row">
-                    <h3 class="section-title">Injection</h3>
+
+                <div class="range-wrapper">
+                    <div class="range-header">
+                        <span>Keep Messages Count</span>
+                        <span class="range-value" id="ss_keepMessagesCount_value">5</span>
+                    </div>
+                    <input type="range" id="ss_keepMessagesCount" name="keepMessagesCount" class="ss-setting-input" min="0" max="20" step="1">
+                    <span class="help-text">Number of recent messages prior to the summary marker to retain in the prompt.</span>
                 </div>
+
                 <div class="control-group">
                     <label class="block-label">Injection Template</label>
                     <input type="text" id="ss_injectTemplate" name="injectTemplate" class="ss-setting-input">
@@ -239,6 +241,7 @@
                 </div>
             </div>
 
+            <!-- SECTION 5: DEBUG SETTINGS -->
             <div class="section">
                 <div class="section-header-row">
                     <h3 class="section-title">Debug Settings</h3>

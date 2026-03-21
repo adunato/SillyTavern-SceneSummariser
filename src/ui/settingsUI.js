@@ -95,6 +95,17 @@ export function bindSettingsUI(container) {
             updatePromptVisibility(container);
         }
 
+        if (name === 'summariesToInject') {
+            const display = container.querySelector('#ss_summariesToInject_value');
+            if (display) display.textContent = newValue;
+            applyInjection();
+        }
+
+        if (name === 'summaryContextDepth') {
+            const display = container.querySelector('#ss_summaryContextDepth_value');
+            if (display) display.textContent = newValue;
+        }
+
         if (name === 'batchSize') {
             const display = container.querySelector('#ss_batchSize_value');
             if (display) display.textContent = newValue;
@@ -112,11 +123,6 @@ export function bindSettingsUI(container) {
 
         if (name === 'manualSummaryLimit') {
             const display = container.querySelector('#ss_manualSummaryLimit_value');
-            if (display) display.textContent = newValue;
-        }
-
-        if (name === 'summaryHistoryDepth') {
-            const display = container.querySelector('#ss_summaryHistoryDepth_value');
             if (display) display.textContent = newValue;
         }
 
@@ -398,8 +404,7 @@ export function updateSettingsUI(container) {
     setValue('#ss_summaryPrompt', settings.summaryPrompt ?? defaultSettings.summaryPrompt);
     setValue('#ss_consolidationPrompt', settings.consolidationPrompt ?? defaultSettings.consolidationPrompt);
     setValue('#ss_summaryWords', settings.summaryWords ?? defaultSettings.summaryWords);
-    setValue('#ss_storeHistory', settings.storeHistory ?? defaultSettings.storeHistory);
-    setValue('#ss_maxSummaries', settings.maxSummaries ?? defaultSettings.maxSummaries);
+    setValue('#ss_summariesToInject', settings.summariesToInject ?? defaultSettings.summariesToInject);
     setValue('#ss_debugMode', settings.debugMode ?? defaultSettings.debugMode);
     setValue('#ss_injectEnabled', settings.injectEnabled ?? defaultSettings.injectEnabled);
     setValue('#ss_injectDepth', settings.injectDepth ?? defaultSettings.injectDepth);
@@ -412,7 +417,7 @@ export function updateSettingsUI(container) {
     setValue('#ss_maxBatchSummaries', settings.maxBatchSummaries ?? defaultSettings.maxBatchSummaries);
     setValue('#ss_keepMessagesCount', settings.keepMessagesCount ?? defaultSettings.keepMessagesCount);
     setValue('#ss_manualSummaryLimit', settings.manualSummaryLimit ?? defaultSettings.manualSummaryLimit);
-    setValue('#ss_summaryHistoryDepth', settings.summaryHistoryDepth ?? defaultSettings.summaryHistoryDepth);
+    setValue('#ss_summaryContextDepth', settings.summaryContextDepth ?? defaultSettings.summaryContextDepth);
     // Memory extraction (§2)
     setValue('#ss_memoryExtractionEnabled', settings.memoryExtractionEnabled ?? defaultSettings.memoryExtractionEnabled);
     setValue('#ss_memoryPrompt', settings.memoryPrompt ?? defaultSettings.memoryPrompt);
@@ -429,6 +434,12 @@ export function updateSettingsUI(container) {
     const wordsDisplay = container.querySelector('#ss_summaryWords_value');
     if (wordsDisplay) wordsDisplay.textContent = settings.summaryWords ?? defaultSettings.summaryWords;
 
+    const summariesToInjectDisplay = container.querySelector('#ss_summariesToInject_value');
+    if (summariesToInjectDisplay) summariesToInjectDisplay.textContent = settings.summariesToInject ?? defaultSettings.summariesToInject;
+
+    const summaryContextDepthDisplay = container.querySelector('#ss_summaryContextDepth_value');
+    if (summaryContextDepthDisplay) summaryContextDepthDisplay.textContent = settings.summaryContextDepth ?? defaultSettings.summaryContextDepth;
+
     const batchSizeDisplay = container.querySelector('#ss_batchSize_value');
     if (batchSizeDisplay) batchSizeDisplay.textContent = settings.batchSize ?? defaultSettings.batchSize;
 
@@ -440,9 +451,6 @@ export function updateSettingsUI(container) {
 
     const manualSummaryLimitDisplay = container.querySelector('#ss_manualSummaryLimit_value');
     if (manualSummaryLimitDisplay) manualSummaryLimitDisplay.textContent = settings.manualSummaryLimit ?? defaultSettings.manualSummaryLimit;
-
-    const summaryHistoryDepthDisplay = container.querySelector('#ss_summaryHistoryDepth_value');
-    if (summaryHistoryDepthDisplay) summaryHistoryDepthDisplay.textContent = settings.summaryHistoryDepth ?? defaultSettings.summaryHistoryDepth;
 
     const currentSummary = container.querySelector('#ss_currentSummary');
     if (currentSummary) currentSummary.value = buildSummaryText(chatState, settings);
