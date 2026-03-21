@@ -47,12 +47,12 @@ export function applyInjection() {
     const settings = extension_settings[settingsKey];
     const chatState = getChatState();
     
-    console.log(`[${extensionName}] [applyInjection] Triggered. enabled=${settings?.enabled}, injectEnabled=${settings?.injectEnabled}`);
+    logDebug('log', `[applyInjection] Triggered. enabled=${settings?.enabled}, injectEnabled=${settings?.injectEnabled}`);
     
     if (!settings || !settings.injectEnabled || !settings.enabled) {
         try {
             setExtensionPrompt(extensionName, '', extension_prompt_types.IN_PROMPT, 0, false, extension_prompt_roles.SYSTEM);
-            console.log(`[${extensionName}] [applyInjection] Cleared injection because extension or injection is disabled.`);
+            logDebug('log', '[applyInjection] Cleared injection because extension or injection is disabled.');
         } catch (err) {
             console.error(`[${extensionName}] Failed to clear injection:`, err);
         }
@@ -63,7 +63,7 @@ export function applyInjection() {
     if (position === extension_prompt_types.NONE) {
         try {
             setExtensionPrompt(extensionName, '', extension_prompt_types.IN_PROMPT, 0, false, extension_prompt_roles.SYSTEM);
-            console.log(`[${extensionName}] [applyInjection] Cleared injection because position is NONE.`);
+            logDebug('log', '[applyInjection] Cleared injection because position is NONE.');
         } catch (err) {
             console.error(`[${extensionName}] Failed to clear injection (NONE):`, err);
         }
@@ -73,9 +73,8 @@ export function applyInjection() {
     const template = settings.injectTemplate || defaultSettings.injectTemplate;
     const summaryText = buildSummaryText(chatState, settings);
     
-    console.log(`[${extensionName}] [applyInjection] Template used: "${template}"`);
-    console.log(`[${extensionName}] [applyInjection] Generated summaryText length: ${summaryText ? summaryText.length : 0}`);
-    console.log(`[${extensionName}] [applyInjection] Generated summaryText: ${summaryText ? summaryText.substring(0, 100) : '[empty]'}`);
+    logDebug('log', `[applyInjection] Template used: "${template}"`);
+    logDebug('log', `[applyInjection] Generated summaryText length: ${summaryText ? summaryText.length : 0}`);
     
     const value = template
         .replace(/\{\{summary\}\}/ig, summaryText);
@@ -87,9 +86,10 @@ export function applyInjection() {
     try {
         setExtensionPrompt(extensionName, value, position, depth, scan, role);
         const valuePreview = value ? (value.substring(0, 100).replace(/\n/g, ' ') + '...') : '[empty]';
-        console.log(`[${extensionName}] [applyInjection] Injection successful (pos=${position}, depth=${depth}, scan=${scan}, role=${role}). Value preview: ${valuePreview}`);
+        logDebug('log', `[applyInjection] Injection successful (pos=${position}, depth=${depth}, scan=${scan}, role=${role}). Value preview: ${valuePreview}`);
     } catch (err) {
         console.error(`[${extensionName}] Failed to set injection prompt:`, err);
+        logDebug('error', 'Failed to set injection prompt', err?.message || err);
     }
 }
 

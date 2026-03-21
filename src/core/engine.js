@@ -110,11 +110,20 @@ export function buildSummaryText(chatState, settings) {
         // If fullCount is 0, all injected snapshots are full text.
         // Otherwise, only the last 'fullCount' snapshots in the injected list are full text.
         const isFull = fullCount === 0 || (lastSnapshots.length - index <= fullCount);
-        
+
+        let blockText = '';
         if (isFull) {
-            return `${s.title}: ${s.text}`;
+            blockText = `${s.title}: ${s.text}`;
         } else {
-            return `${s.title}: ${s.description || 'No description available.'}`;
+            blockText = `${s.title}: ${s.description || 'No description available.'}`;
         }
-    }).join('\n');
+
+        const memoryEnabled = settings?.memoryExtractionEnabled ?? defaultSettings.memoryExtractionEnabled;
+        if (memoryEnabled && s.memories && s.memories.length > 0) {
+            const memoriesList = s.memories.map(m => `- ${m}`).join('\n');
+            blockText += `\nMemories:\n${memoriesList}`;
+        }
+
+        return blockText;
+    }).join('\n\n');
 }
