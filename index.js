@@ -1,3 +1,4 @@
+import * as api from './src/core/api.js';
 import { extensionName, state } from './src/constants.js';
 import { logDebug } from './src/utils/logger.js';
 import { ensureSettings } from './src/state/stateManager.js';
@@ -16,6 +17,12 @@ jQuery(async () => {
     ensureSettings();
     await mountSettings();
     startButtonMount();
+
+    // Register Public API
+    window.SceneSummariser = {
+        ...api,
+    };
+
     try {
         eventSource?.on(event_types.CHAT_CHANGED, onChatChanged);
         
