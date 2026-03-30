@@ -1,7 +1,7 @@
 import { getChatState, ensureSettings } from '../state/stateManager.js';
 import { buildSummaryText, getLatestSnapshot } from './engine.js';
 import { extension_settings } from '../../../../../extensions.js';
-import { settingsKey } from '../constants.js';
+import { settingsKey, extensionName } from '../constants.js';
 
 /**
  * Returns the full summary text as it would be injected into the prompt.
@@ -11,7 +11,9 @@ export function getCurrentSummary() {
     ensureSettings();
     const settings = extension_settings[settingsKey];
     const chatState = getChatState();
-    return buildSummaryText(chatState, settings);
+    const summary = buildSummaryText(chatState, settings);
+    console.log(`[${extensionName}] API: getCurrentSummary called. Length: ${summary?.length || 0}`);
+    return summary;
 }
 
 /**
@@ -21,7 +23,9 @@ export function getCurrentSummary() {
 export function getLatestSnapshotData() {
     ensureSettings();
     const chatState = getChatState();
-    return getLatestSnapshot(chatState);
+    const snapshot = getLatestSnapshot(chatState);
+    console.log(`[${extensionName}] API: getLatestSnapshotData called. Found: ${!!snapshot}`);
+    return snapshot;
 }
 
 /**
@@ -31,5 +35,7 @@ export function getLatestSnapshotData() {
 export function getCurrentRecalledMemories() {
     ensureSettings();
     const chatState = getChatState();
-    return chatState.currentSemanticResults || [];
+    const results = chatState.currentSemanticResults || [];
+    console.log(`[${extensionName}] API: getCurrentRecalledMemories called. Results: ${results.length}`);
+    return results;
 }
