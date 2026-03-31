@@ -119,9 +119,9 @@ export function buildSummaryText(chatState, settings) {
 
         if (memoryEnabled && s.memories && s.memories.length > 0) {
             if (isFullMemory || !semanticEnabled) {
-                const memoriesList = s.memories.map(m => `- ${m}`).join('\n');
+                const memoriesList = s.memories.map(m => `- ${m.trim()}`).join('\n');
                 blockText += `\nMemories:\n${memoriesList}`;
-                s.memories.forEach(m => injectedFacts.add(m));
+                s.memories.forEach(m => injectedFacts.add(m.trim()));
             } else {
                 const relevantFacts = [];
                 if (chatState.currentSemanticResults) {
@@ -136,9 +136,11 @@ export function buildSummaryText(chatState, settings) {
                         }
 
                         if (isMatch && isMemoryRelevant(resMetadata, resText)) {
-                            const fact = resMetadata.fact || resText.substring(resText.indexOf('\n- ') + 3).trim();
-                            relevantFacts.push(fact);
-                            injectedFacts.add(fact);
+                            const fact = (resMetadata.fact || resText.substring(resText.indexOf('\n- ') + 3)).trim();
+                            if (!injectedFacts.has(fact)) {
+                                relevantFacts.push(fact);
+                                injectedFacts.add(fact);
+                            }
                         }
                     });
                 }
@@ -158,10 +160,11 @@ export function buildSummaryText(chatState, settings) {
             
             if (!isMemoryRelevant(resMetadata, resText)) return;
 
-            const fact = resMetadata.fact || resText.substring(resText.indexOf('\n- ') + 3).trim();
+            const fact = (resMetadata.fact || resText.substring(resText.indexOf('\n- ') + 3)).trim();
             if (!injectedFacts.has(fact)) {
                 const title = resMetadata.title || resText.split(':')[0] || 'Memory';
                 standaloneFacts.push(`[${title}] ${fact}`);
+                injectedFacts.add(fact);
             }
         });
         if (standaloneFacts.length > 0) {
