@@ -29,7 +29,7 @@ function getBaseVectorPayload() {
 /**
  * Inserts memory items into the dedicated vector collection.
  * @param {string} collectionId
- * @param {{ text: string, metadata: object }[]} items
+ * @param {{ text: string, hash: number, index: number, metadata: object }[]} items
  */
 export async function insertVectorItems(collectionId, items) {
     if (!items || items.length === 0) return;
@@ -38,7 +38,12 @@ export async function insertVectorItems(collectionId, items) {
         const payload = {
             ...getBaseVectorPayload(),
             collectionId,
-            items
+            items: items.map(item => ({
+                text: item.text,
+                hash: item.hash,
+                index: item.index,
+                metadata: item.metadata
+            }))
         };
 
         const response = await fetch('/api/vector/insert', {
@@ -51,6 +56,49 @@ export async function insertVectorItems(collectionId, items) {
         console.log(`[${extensionName}] [vectorHandler] Inserted ${items.length} items into ${collectionId}`);
     } catch (err) {
         console.error(`[${extensionName}] [vectorHandler] Failed to insert vectors:`, err);
+    }
+}
+
+/**
+ * Fetches the list of hashes already present in the collection.
+ * @param {string} collectionId
+ * @returns {Promise<number[]>}
+ */
+export async function listVectorHashes(collectionId) {
+    try {
+        const response = await fetch('/api/vector/list', {
+            method: 'POST',
+            headers: getRequestHeaders(),
+            body: JSON.stringify({ ...getBaseVectorPayload(), collectionId }),
+        });
+        if (!response.ok) {
+            if (response.status === 404) return [];
+            throw new Error(`Server error: ${response.status}`);
+        }
+        return await response.json();
+    } catch (err) {
+        console.error(`[${extensionName}] [vectorHandler] Failed to list hashes:`, err);
+        return [];
+    }
+}
+
+/**
+ * Deletes items from the vector collection by their hashes.
+ * @param {string} collectionId
+ * @param {number[]} hashes
+ */
+export async function deleteVectorItems(collectionId, hashes) {
+    if (!hashes || hashes.length === 0) return;
+    try {
+        const response = await fetch('/api/vector/delete', {
+            method: 'POST',
+            headers: getRequestHeaders(),
+            body: JSON.stringify({ ...getBaseVectorPayload(), collectionId, hashes }),
+        });
+        if (!response.ok) throw new Error(`Server error: ${response.status}`);
+        console.log(`[${extensionName}] [vectorHandler] Deleted ${hashes.length} items from ${collectionId}`);
+    } catch (err) {
+        console.error(`[${extensionName}] [vectorHandler] Failed to delete vectors:`, err);
     }
 }
 

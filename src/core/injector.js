@@ -172,7 +172,8 @@ export async function filterContextInterceptor(chat, maxContext, abort, type) {
     const settings = extension_settings[settingsKey];
     
     if (settings?.enabled && settings?.semanticRetrievalEnabled) {
-        await handleSemanticRetrieval(chat);
+        // Run retrieval in background to avoid blocking prompt construction
+        handleSemanticRetrieval(chat).catch(err => console.error(`[${extensionName}] Async semantic retrieval failed:`, err));
     }
 
     if (!settings?.limitToUnsummarised) return;
