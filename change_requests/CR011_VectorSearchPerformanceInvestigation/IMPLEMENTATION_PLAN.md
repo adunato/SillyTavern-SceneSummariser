@@ -4,43 +4,25 @@
 **Goal**: Replace full re-indexing with hash-based incremental updates.
 
 1. **Update `vectorHandler.js`**:
-    - Add a wrapper for `/api/vector/list` to fetch existing hashes.
-    - Add a wrapper for `/api/vector/delete` to remove items by hash.
-    - Update `insertVectorItems` to optionally accept hashes.
+    - Add a wrapper for `/api/vector/list` (`listVectorHashes`) to fetch existing hashes.
+    - Add a wrapper for `/api/vector/delete` (`deleteVectorItems`) to remove items by hash.
+    - Update `insertVectorItems` to include `hash` and `index` in the metadata items.
 
 2. **Update `memoryFileHandler.js`**:
     - Modify `persistMemoriesForChat` to:
-        - Fetch the list of hashes already in the collection.
-        - Calculate a composite hash for each memory in `chatState.snapshots` (e.g., `getStringHash(snap.id + factText)`).
-        - Identify "new" memories (hash not in collection) and "deleted" memories (hash in collection but not in current `chatState`).
-        - Perform incremental `insert` for new items and `delete` for removed items.
+        - Fetch existing hashes using `listVectorHashes`.
+        - Calculate composite hashes for current memories (`getStringHash(snap.id + factText)`).
+        - Filter items to `insert` only if they don't already exist.
+        - Identify and `delete` items whose hashes are no longer in the `chatState`.
         - Remove `purgeVectorCollection` from the normal flow.
 
-## Phase 2: Asynchronous Search & Caching
-**Goal**: Eliminate prompt blocking and redundant queries.
+## Phase 2: Asynchronous Search
+**Goal**: Eliminate prompt blocking.
 
-1. **Update `stateManager.js`**:
-    - Add fields to the transient state for caching: `lastQueryFingerprint`, `lastResults`, `lastSearchTimestamp`.
-
-2. **Update `injector.js`**:
-    - Refactor `handleSemanticRetrieval` to:
-        - Calculate a fingerprint of the current context (e.g., hash of last 5 message IDs).
-        - Check if the fingerprint matches the cache. If so, return cached results immediately.
-        - If not, return cached results (if available) but trigger a background search.
-        - Ensure `applyInjection` is called only after the background search finishes.
+1. **Update `injector.js`**:
+    - Refactor `handleSemanticRetrieval` to be non-blocking when called from `filterContextInterceptor`.
+    - Ensure `applyInjection` is called correctly within the async flow.
     - Remove `await` from the `filterContextInterceptor` call to `handleSemanticRetrieval`.
-
-3. **Event Hooks**:
-    - Hook into `MESSAGE_RECEIVED` and `CHARACTER_MESSAGE_RENDERED` to trigger a background search pre-emptively.
-
-## Phase 3: Query Refinement & Collection Management
-**Goal**: Improve retrieval quality and storage hygiene.
-
-1. **Refine Query**:
-    - Update `handleSemanticRetrieval` to use a more focused query (last exchange + current scene description).
-
-2. **Hygiene**:
-    - Ensure the collection is purged when a chat is deleted (if a hook is available) or when a "Reset Vector Storage" button is pressed in the UI.
 
 ## Verification Plan
 1. **Performance**: 
