@@ -2,7 +2,7 @@ import { extensionName } from '../constants.js';
 import { logDebug } from '../utils/logger.js';
 import { extension_settings, getContext } from '../../../../../extensions.js';
 import { saveSettingsDebounced } from '../../../../../../script.js';
-import { getStringHash } from '../../../../utils.js';
+import { getStringHash } from '../../../../../utils.js';
 import { deleteFileFromServer } from '../../../../../../scripts/chats.js';
 import { getActiveChatId } from '../state/stateManager.js';
 import { getChatCollectionId, insertVectorItems, listVectorHashes, deleteVectorItems } from './vectorHandler.js';
