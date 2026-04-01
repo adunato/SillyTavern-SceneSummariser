@@ -77,11 +77,39 @@ export function buildSummaryText(chatState, settings) {
     const memoryEnabled = settings?.memoryExtractionEnabled ?? defaultSettings.memoryExtractionEnabled;
     const semanticEnabled = settings?.semanticRetrievalEnabled ?? false;
 
+    const ctx = getContext();
+    const activeChar = ctx?.name2 || ''; // Current character being generated for
+
     let lastSnapshots = chatState.snapshots || [];
     if (count > 0) lastSnapshots = lastSnapshots.slice(-count);
 
     const injectedBlocks = [];
     const injectedFacts = new Set(); 
+
+    // Helper to check if a memory is relevant to the active character
+    const isMemoryRelevant = (resMetadata, resText) => {
+        if (!activeChar) return true;
+        
+        // Use metadata if available (newly stored items)
+        if (Array.isArray(resMetadata.characters)) {
+            // If no characters assigned, it's a general fact (global)
+            if (resMetadata.characters.length === 0) return true;
+            
+            // Match active character name (case-insensitive)
+            const activeCharLower = activeChar.toLowerCase();
+            return resMetadata.characters.some(c => c.toLowerCase() === activeCharLower);
+        }
+
+        // Fallback for legacy items (parse from text)
+        const fact = resMetadata.fact || (resText.includes('\n- ') ? resText.substring(resText.indexOf('\n- ') + 3).trim() : resText);
+        const charMatch = fact.match(/^([^:]+):/);
+        if (charMatch) {
+            const chars = charMatch[1].split(',').map(c => c.trim().toLowerCase());
+            return chars.includes(activeChar.toLowerCase());
+        }
+
+        return true; // No character prefix found, assume general fact
+    };
 
     lastSnapshots.forEach((s, index) => {
         const isFullSummary = fullSummaryCount === 0 || (lastSnapshots.length - index <= fullSummaryCount);
@@ -91,9 +119,9 @@ export function buildSummaryText(chatState, settings) {
 
         if (memoryEnabled && s.memories && s.memories.length > 0) {
             if (isFullMemory || !semanticEnabled) {
-                const memoriesList = s.memories.map(m => `- ${m}`).join('\n');
+                const memoriesList = s.memories.map(m => `- ${m.trim()}`).join('\n');
                 blockText += `\nMemories:\n${memoriesList}`;
-                s.memories.forEach(m => injectedFacts.add(m));
+                s.memories.forEach(m => injectedFacts.add(m.trim()));
             } else {
                 const relevantFacts = [];
                 if (chatState.currentSemanticResults) {
@@ -106,10 +134,13 @@ export function buildSummaryText(chatState, settings) {
                         } else {
                             isMatch = resText.startsWith(`${s.title}:\n- `);
                         }
-                        if (isMatch) {
-                            const fact = resMetadata.fact || resText.substring(resText.indexOf('\n- ') + 3).trim();
-                            relevantFacts.push(fact);
-                            injectedFacts.add(fact);
+
+                        if (isMatch && isMemoryRelevant(resMetadata, resText)) {
+                            const fact = (resMetadata.fact || resText.substring(resText.indexOf('\n- ') + 3)).trim();
+                            if (!injectedFacts.has(fact)) {
+                                relevantFacts.push(fact);
+                                injectedFacts.add(fact);
+                            }
                         }
                     });
                 }
@@ -126,10 +157,14 @@ export function buildSummaryText(chatState, settings) {
         chatState.currentSemanticResults.forEach(res => {
             const resMetadata = res.metadata || {};
             const resText = res.text || '';
-            const fact = resMetadata.fact || resText.substring(resText.indexOf('\n- ') + 3).trim();
+            
+            if (!isMemoryRelevant(resMetadata, resText)) return;
+
+            const fact = (resMetadata.fact || resText.substring(resText.indexOf('\n- ') + 3)).trim();
             if (!injectedFacts.has(fact)) {
                 const title = resMetadata.title || resText.split(':')[0] || 'Memory';
                 standaloneFacts.push(`[${title}] ${fact}`);
+                injectedFacts.add(fact);
             }
         });
         if (standaloneFacts.length > 0) {

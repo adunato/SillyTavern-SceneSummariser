@@ -76,6 +76,12 @@ export async function persistMemoriesForChat(chatState) {
                     // Use a composite hash of snapshot ID and memory content
                     const hash = getStringHash(`${snapshot.id}_${memText}`);
                     
+                    // Extract character associations (e.g. "Char1, Char2: fact")
+                    const charMatch = memText.match(/^([^:]+):/);
+                    const characters = charMatch 
+                        ? charMatch[1].split(',').map(c => c.trim()).filter(c => c)
+                        : [];
+
                     currentHashesSet.add(hash);
                     currentItems.push({
                         text,
@@ -83,7 +89,8 @@ export async function persistMemoriesForChat(chatState) {
                         index,
                         metadata: {
                             snapshotId: snapshot.id,
-                            fact: memText
+                            fact: memText,
+                            characters: characters // Store as explicit array for filtering
                         }
                     });
                 });
